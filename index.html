@@ -95,6 +95,16 @@ svg#diagram.panning{cursor:grabbing}
 .ctrl.on{display:flex}
 .ctrl-btn{width:31px;height:31px;background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .1s;line-height:1}
 .ctrl-btn:hover{background:var(--surface2);color:var(--text)}
+.focus-bar{position:absolute;left:13px;top:13px;display:none;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--warning);border-radius:8px;padding:5px 11px;z-index:10;font-size:12px;color:var(--warning)}
+.focus-bar.on{display:flex}
+.focus-name{font-family:var(--mono);font-size:11.5px;color:var(--text);background:var(--bg);padding:2px 7px;border-radius:4px;border:1px solid var(--border2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.focus-cnt{font-size:10.5px;color:var(--text3)}
+.focus-reset{background:none;border:1px solid var(--border);color:var(--text2);border-radius:5px;padding:2px 9px;cursor:pointer;font-size:11.5px;transition:background .12s}
+.focus-reset:hover{background:var(--surface2);color:var(--text)}
+/* 배치 목록 필터 드롭다운 */
+.batch-filter-bar{padding:8px 13px 4px;border-bottom:1px solid var(--border2);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.batch-filter-sel{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:3px 7px;font-size:11.5px;cursor:pointer;flex:1;min-width:0}
+.batch-filter-sel:focus{outline:none;border-color:var(--accent)}
 .ctrl-sep{height:1px;background:var(--border2)}
 .legend{position:absolute;left:13px;bottom:13px;display:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;z-index:10;font-size:11.5px}
 .legend.on{display:flex;flex-direction:column;gap:5px}
@@ -248,6 +258,14 @@ select.form-input{cursor:pointer}
 
     <!-- ── Job List ── -->
     <div class="pane" id="pane-jobs">
+      <!-- 배치 선택 드롭다운 + 포커스 버튼 -->
+      <div class="batch-filter-bar" id="batch-filter-bar" style="display:none">
+        <select class="batch-filter-sel" id="batch-quick-sel">
+          <option value="">— 배치 선택하여 포커스 —</option>
+        </select>
+        <button class="btn btn-s" id="btn-focus-sel" style="padding:0 8px;height:26px;font-size:11.5px" title="선택 배치만 보기">포커스</button>
+        <button class="btn btn-g" id="btn-all-view" style="padding:0 8px;height:26px;font-size:11.5px">전체</button>
+      </div>
       <div class="list-legend">
         <span><span class="ldot" style="background:var(--success)"></span>시작</span>
         <span><span class="ldot" style="background:var(--info)"></span>종료</span>
@@ -306,6 +324,13 @@ select.form-input{cursor:pointer}
       <defs id="svg-defs"></defs>
       <g id="dag-root"></g>
     </svg>
+    <!-- 포커스 모드 표시 바 (좌상단) -->
+    <div class="focus-bar" id="focus-bar">
+      <span>🔍 포커스</span>
+      <span class="focus-name" id="focus-name"></span>
+      <span class="focus-cnt" id="focus-cnt"></span>
+      <button class="focus-reset" id="btn-focus-reset">전체 보기</button>
+    </div>
     <div class="ctrl" id="ctrl">
       <button class="ctrl-btn" id="btn-fit" title="화면 맞추기">⊡</button>
       <div class="ctrl-sep"></div>
@@ -373,6 +398,8 @@ const NW=220, NH=68, RG=140, NG=58, PAD=50;
 const S = {
   graph: null, pos: null, selected: null, tab: 'input',
   vt: {x:60,y:40,s:1}, panStart: null, panned: false,
+  focusSet: null,   // null=전체, Set=포커스 배치 집합
+  focusName: null,  // 포커스 기준 배치명
 };
 
 // ── API config (localStorage-backed) ─────────────────────────────────────────
@@ -547,8 +574,10 @@ function renderSVG(){
       }
     }
   }
+  const fs=S.focusSet; // null=전체, Set=포커스 필터
   let eH='',nH='',lH='';
   for(const e of graph.edges){
+    if(fs && (!fs.has(e.from)||!fs.has(e.to))) continue; // 포커스 외 에지 숨김
     const sp=pos.get(e.from),tp=pos.get(e.to);
     if(!sp||!tp) continue;
     const sx=sp.x+NW,sy=sp.y+NH/2,tx=tp.x,ty=tp.y+NH/2,mx=(sx+tx)/2;
@@ -566,6 +595,7 @@ function renderSVG(){
     }
   }
   for(const job of graph.jobs){
+    if(fs && !fs.has(job.name)) continue; // 포커스 외 노드 숨김
     const p=pos.get(job.name);if(!p) continue;
     const isRoot=!graph.edges.some(e=>e.to===job.name);
     const isLeaf=!graph.edges.some(e=>e.from===job.name);
@@ -617,12 +647,49 @@ function renderSVG(){
 function fitView(){
   if(!S.pos||!S.pos.size) return;
   let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
-  for(const p of S.pos.values()){x0=Math.min(x0,p.x);y0=Math.min(y0,p.y);x1=Math.max(x1,p.x+NW);y1=Math.max(y1,p.y+NH);}
+  for(const [name,p] of S.pos){
+    if(S.focusSet && !S.focusSet.has(name)) continue; // 포커스 시 해당 노드만 피팅
+    x0=Math.min(x0,p.x);y0=Math.min(y0,p.y);x1=Math.max(x1,p.x+NW);y1=Math.max(y1,p.y+NH);
+  }
+  if(x0===Infinity) return;
   const r=svg.getBoundingClientRect();
   if(!r.width||!r.height) return;
   const pad=40,sc=Math.min((r.width-pad*2)/(x1-x0),(r.height-pad*2)/(y1-y0),1.6);
   S.vt.s=sc;S.vt.x=(r.width-(x1-x0)*sc)/2-x0*sc;S.vt.y=(r.height-(y1-y0)*sc)/2-y0*sc;
   applyTransform();
+}
+
+// ── 포커스 모드 ──────────────────────────────────────────────────────────────
+function buildReachableSet(name){
+  const g=S.graph; if(!g) return new Set();
+  const set=new Set([name]);
+  // 후행(downstream) BFS
+  const qD=[name];
+  while(qD.length){ const c=qD.shift(); for(const e of g.edges) if(e.from===c&&!set.has(e.to)){set.add(e.to);qD.push(e.to);} }
+  // 선행(upstream) BFS
+  const qU=[name];
+  while(qU.length){ const c=qU.shift(); for(const e of g.edges) if(e.to===c&&!set.has(e.from)){set.add(e.from);qU.push(e.from);} }
+  return set;
+}
+
+function setFocus(name){
+  if(!name){ clearFocus(); return; }
+  const set=buildReachableSet(name);
+  S.focusSet=set; S.focusName=name;
+  renderSVG(); setTimeout(fitView,50);
+  // 포커스 바 업데이트
+  $('focus-bar').classList.add('on');
+  $('focus-name').textContent=name;
+  $('focus-cnt').textContent=`${set.size}개 배치`;
+  // 드롭다운 값 동기화
+  $('batch-quick-sel').value=name;
+}
+
+function clearFocus(){
+  S.focusSet=null; S.focusName=null;
+  renderSVG(); setTimeout(fitView,50);
+  $('focus-bar').classList.remove('on');
+  $('batch-quick-sel').value='';
 }
 
 // 특정 배치 노드를 화면 중앙으로 이동
@@ -651,6 +718,18 @@ function updateStats(){
 function jobType(name){
   const g=S.graph;if(!g) return 'm';
   return !g.edges.some(e=>e.to===name)?'r':!g.edges.some(e=>e.from===name)?'l':'m';
+}
+
+function updateBatchQuickSel(){
+  const g=S.graph;
+  const sel=$('batch-quick-sel');
+  const bar=$('batch-filter-bar');
+  if(!g){bar.style.display='none';return;}
+  bar.style.display='flex';
+  const prev=sel.value;
+  sel.innerHTML='<option value="">— 배치 선택하여 포커스 —</option>'+
+    g.jobs.map(j=>`<option value="${esc(j.name)}">${esc(j.name)}${j.desc?' · '+j.desc.slice(0,20):''}</option>`).join('');
+  if(prev) sel.value=prev;
 }
 
 function renderJobList(){
@@ -719,10 +798,15 @@ ${scriptRows.map(r=>`<tr><td style="color:var(--text3);width:90px">${r[0]}</td><
   const cmdSection=job.cmdLine?`<div class="section-title">실행 명령</div>
 <div style="font-family:var(--mono);font-size:10.5px;color:var(--text2);background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:8px;word-break:break-all;line-height:1.7;margin-bottom:10px">${esc(job.cmdLine)}</div>`:'';
 
+  const isFocused=S.focusName===job.name;
   $('detail-body').innerHTML=`<div class="detail">
 <div class="detail-head">
   <div class="detail-name">${esc(job.name)}</div>
   <button class="btn btn-g" onclick="closeDetail()" style="font-size:11.5px;height:26px;padding:0 8px">닫기</button>
+</div>
+<div style="display:flex;gap:6px;margin-bottom:10px">
+  <button onclick="setFocus('${esc(job.name)}')" class="btn btn-s" style="flex:1;font-size:11.5px;height:28px">${isFocused?'🔍 포커스 중':'🔍 이 경로만 보기'}</button>
+  ${isFocused?`<button onclick="clearFocus()" class="btn btn-g" style="font-size:11.5px;height:28px;padding:0 9px">전체 보기</button>`:''}
 </div>
 ${job.desc?`<div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;padding:7px 9px;background:var(--surface2);border-radius:5px;border-left:3px solid var(--accent)">${esc(job.desc)}</div>`:''}
 ${pills?`<div class="pills">${pills}</div>`:''}
@@ -773,12 +857,13 @@ function generate(xmlStr){
     $('btn-clear').style.display='';
     $('tab-jobs').style.display='';$('tab-ai').style.display='';$('tab-search').style.display='';
     renderSVG();setTimeout(fitView,50);
-    updateStats();renderJobList();
+    updateStats();renderJobList();updateBatchQuickSel();
     // Reset AI/embed/filter/search state on new graph
     EMB.built=false;EMB.building=false;EMB.data.clear();EMB.progress=0;
     AI.text='';AI.error='';AI.running=false;AI.history=[];
     SRCH.results=[];SRCH.last='';
     FILTER.app.clear();FILTER.sub.clear();FILTER.node.clear();
+    S.focusSet=null;S.focusName=null;$('focus-bar').classList.remove('on');
     setTab('jobs');
   }catch(e){
     $('err-msg').textContent='⚠ '+e.message;$('err-msg').style.display='block';
@@ -841,6 +926,10 @@ $('btn-back').onclick=()=>setTab('input');
 $('btn-fit').onclick=fitView;
 $('btn-zi').onclick=()=>{S.vt.s=Math.min(3,S.vt.s*1.2);applyTransform();};
 $('btn-zo').onclick=()=>{S.vt.s=Math.max(.1,S.vt.s*.83);applyTransform();};
+$('btn-focus-reset').onclick=clearFocus;
+$('btn-focus-sel').onclick=()=>{ const v=$('batch-quick-sel').value; if(v) setFocus(v); };
+$('btn-all-view').onclick=clearFocus;
+$('batch-quick-sel').addEventListener('change',e=>{ if(e.target.value) setFocus(e.target.value); });
 $('tabs').addEventListener('click',e=>{const t=e.target.dataset?.tab;if(t) setTab(t);});
 $('job-list').addEventListener('click',e=>{
   const item=e.target.closest('.job-item');if(!item) return;
