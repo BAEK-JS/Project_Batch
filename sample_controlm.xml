@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Control-M 배치 샘플 XML
+  시나리오: 금융 일배치 처리 (FINANCE DAILY BATCH)
+
+  흐름 요약:
+    [환경초기화]
+        ↓
+    [전처리: 데이터 수신 A, B, C (병렬)]
+        ↓
+    [데이터 검증]
+        ↓
+    [변환: 계좌계, 카드계 (병렬)]
+        ↓
+    [DW 적재 / 마트 적재 (병렬)]
+        ↓         ↓
+    [정산 계산]  [리포트 생성]
+        ↓         ↓
+    [승인 요청]  [결과 파일 전송]
+        ↓
+    [마감 처리]
+        ↓
+    [알림 발송]
+-->
+<DEFTABLE>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 1. 환경 초기화
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_INIT_ENV"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="일배치 실행 환경 초기화 및 락 파일 생성"
+    CMDLINE="/batch/scripts/init_env.sh"
+    MAXWAIT="0"
+    PRIORITY="Very High">
+    <OUTCOND NAME="DAILY_ENV_INIT_OK" ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 2. 외부 데이터 수신 (병렬 3개)
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_RECV_ACCT"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="계좌 마스터 데이터 수신 (FTP)"
+    CMDLINE="/batch/scripts/recv_acct.sh"
+    MAXWAIT="60">
+    <INCOND NAME="DAILY_ENV_INIT_OK"   ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="RECV_ACCT_OK"        ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <JOB
+    JOBNAME="BT_RECV_CARD"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="카드 승인 내역 수신 (MQ)"
+    CMDLINE="/batch/scripts/recv_card.sh"
+    MAXWAIT="60">
+    <INCOND NAME="DAILY_ENV_INIT_OK"   ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="RECV_CARD_OK"        ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <JOB
+    JOBNAME="BT_RECV_FOREX"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="환율 정보 수신 (API)"
+    CMDLINE="/batch/scripts/recv_forex.sh"
+    MAXWAIT="30">
+    <INCOND NAME="DAILY_ENV_INIT_OK"   ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="RECV_FOREX_OK"       ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 3. 데이터 검증 (3개 수신 완료 후 실행)
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_VALIDATE_DATA"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="수신 데이터 무결성 검증 (건수, 체크섬)"
+    CMDLINE="/batch/scripts/validate_data.sh"
+    MAXWAIT="0">
+    <INCOND NAME="RECV_ACCT_OK"        ODATE="ODAT" AND_OR="AND" />
+    <INCOND NAME="RECV_CARD_OK"        ODATE="ODAT" AND_OR="AND" />
+    <INCOND NAME="RECV_FOREX_OK"       ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="DATA_VALIDATE_OK"   ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 4. 데이터 변환 (병렬 2개)
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_TRANSFORM_ACCT"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="계좌 데이터 표준화 변환"
+    CMDLINE="/batch/scripts/transform_acct.sh"
+    MAXWAIT="0">
+    <INCOND NAME="DATA_VALIDATE_OK"    ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="TRANSFORM_ACCT_OK"  ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <JOB
+    JOBNAME="BT_TRANSFORM_CARD"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="카드 승인 데이터 변환 및 집계"
+    CMDLINE="/batch/scripts/transform_card.sh"
+    MAXWAIT="0">
+    <INCOND NAME="DATA_VALIDATE_OK"    ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="TRANSFORM_CARD_OK"  ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 5. DB 적재 (병렬 2개)
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_LOAD_DW"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="데이터 웨어하우스 적재"
+    CMDLINE="/batch/scripts/load_dw.sh"
+    MAXWAIT="0">
+    <INCOND NAME="TRANSFORM_ACCT_OK"   ODATE="ODAT" AND_OR="AND" />
+    <INCOND NAME="TRANSFORM_CARD_OK"   ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="LOAD_DW_OK"         ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <JOB
+    JOBNAME="BT_LOAD_MART"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="데이터 마트 적재 (요약 테이블)"
+    CMDLINE="/batch/scripts/load_mart.sh"
+    MAXWAIT="0">
+    <INCOND NAME="TRANSFORM_ACCT_OK"   ODATE="ODAT" AND_OR="AND" />
+    <INCOND NAME="TRANSFORM_CARD_OK"   ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="LOAD_MART_OK"       ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 6. 정산 처리 (DW 적재 완료 후)
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_CALC_SETTLE"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="일정산 금액 계산"
+    CMDLINE="/batch/scripts/calc_settle.sh"
+    MAXWAIT="0">
+    <INCOND NAME="LOAD_DW_OK"          ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="CALC_SETTLE_OK"     ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <JOB
+    JOBNAME="BT_CALC_FEE"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="수수료 계산"
+    CMDLINE="/batch/scripts/calc_fee.sh"
+    MAXWAIT="0">
+    <INCOND NAME="LOAD_DW_OK"          ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="CALC_FEE_OK"        ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 7. 리포트 생성 (마트 적재 완료 후)
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_REPORT_DAILY"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="일간 경영 리포트 생성"
+    CMDLINE="/batch/scripts/report_daily.sh"
+    MAXWAIT="0">
+    <INCOND NAME="LOAD_MART_OK"        ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="REPORT_DAILY_OK"    ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <JOB
+    JOBNAME="BT_REPORT_RISK"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="리스크 지표 리포트 생성"
+    CMDLINE="/batch/scripts/report_risk.sh"
+    MAXWAIT="0">
+    <INCOND NAME="LOAD_MART_OK"        ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="REPORT_RISK_OK"     ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 8. 승인 요청 (정산 + 수수료 완료 후)
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_APPROVE_REQUEST"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="결재 시스템 승인 요청"
+    CMDLINE="/batch/scripts/approve_request.sh"
+    MAXWAIT="0">
+    <INCOND NAME="CALC_SETTLE_OK"      ODATE="ODAT" AND_OR="AND" />
+    <INCOND NAME="CALC_FEE_OK"         ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="APPROVE_REQUEST_OK" ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 9. 결과 파일 전송 (리포트 완료 후)
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_SEND_REPORT"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="리포트 파일 외부 기관 전송 (SFTP)"
+    CMDLINE="/batch/scripts/send_report.sh"
+    MAXWAIT="0">
+    <INCOND NAME="REPORT_DAILY_OK"     ODATE="ODAT" AND_OR="AND" />
+    <INCOND NAME="REPORT_RISK_OK"      ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="SEND_REPORT_OK"     ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 10. 마감 처리 (승인 + 전송 완료 후)
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_CLOSE_DAY"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="일 마감 처리 및 다음 영업일 준비"
+    CMDLINE="/batch/scripts/close_day.sh"
+    MAXWAIT="0">
+    <INCOND NAME="APPROVE_REQUEST_OK"  ODATE="ODAT" AND_OR="AND" />
+    <INCOND NAME="SEND_REPORT_OK"      ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="CLOSE_DAY_OK"       ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 11. 최종 알림 발송
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_NOTIFY_COMPLETE"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="DAILY_BATCH"
+    TASKTYPE="Command"
+    DESCRIPTION="일배치 완료 메일/SMS 발송"
+    CMDLINE="/batch/scripts/notify_complete.sh"
+    MAXWAIT="0">
+    <INCOND NAME="CLOSE_DAY_OK"        ODATE="ODAT" AND_OR="AND" />
+  </JOB>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 12. 이상 거래 탐지 (DW 적재 완료 후 독립 실행)
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_FDS_DETECT"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="FDS"
+    TASKTYPE="Command"
+    DESCRIPTION="이상 거래 탐지 (FDS) 분석"
+    CMDLINE="/batch/scripts/fds_detect.sh"
+    MAXWAIT="0">
+    <INCOND NAME="LOAD_DW_OK"          ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="FDS_DETECT_OK"      ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <JOB
+    JOBNAME="BT_FDS_ALERT"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="FDS"
+    TASKTYPE="Command"
+    DESCRIPTION="FDS 탐지 결과 알림 발송"
+    CMDLINE="/batch/scripts/fds_alert.sh"
+    MAXWAIT="0">
+    <INCOND NAME="FDS_DETECT_OK"       ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="FDS_ALERT_OK"       ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <!-- ══════════════════════════════════════════════════════
+       STEP 13. 백업 (마감 완료 후)
+       ══════════════════════════════════════════════════════ -->
+
+  <JOB
+    JOBNAME="BT_BACKUP_DB"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="INFRA"
+    TASKTYPE="Command"
+    DESCRIPTION="운영 DB 일간 백업"
+    CMDLINE="/batch/scripts/backup_db.sh"
+    MAXWAIT="0">
+    <INCOND NAME="CLOSE_DAY_OK"        ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="BACKUP_DB_OK"       ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <JOB
+    JOBNAME="BT_BACKUP_FILES"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="INFRA"
+    TASKTYPE="Command"
+    DESCRIPTION="배치 처리 결과 파일 아카이브"
+    CMDLINE="/batch/scripts/backup_files.sh"
+    MAXWAIT="0">
+    <INCOND NAME="CLOSE_DAY_OK"        ODATE="ODAT" AND_OR="AND" />
+    <OUTCOND NAME="BACKUP_FILES_OK"    ODATE="ODAT" SIGN="+" />
+  </JOB>
+
+  <JOB
+    JOBNAME="BT_CLEANUP"
+    APPLICATION="FINANCE"
+    SUB_APPLICATION="INFRA"
+    TASKTYPE="Command"
+    DESCRIPTION="임시 파일 및 로그 정리"
+    CMDLINE="/batch/scripts/cleanup.sh"
+    MAXWAIT="0">
+    <INCOND NAME="BACKUP_DB_OK"        ODATE="ODAT" AND_OR="AND" />
+    <INCOND NAME="BACKUP_FILES_OK"     ODATE="ODAT" SIGN="+" />
+    <INCOND NAME="FDS_ALERT_OK"        ODATE="ODAT" AND_OR="AND" />
+  </JOB>
+
+</DEFTABLE>
