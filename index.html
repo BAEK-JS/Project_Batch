@@ -146,6 +146,31 @@ select.form-input{cursor:pointer}
    NEW: Search Pane
    ══════════════════════════════════════════ */
 .search-bar{display:flex;gap:6px;padding:10px 13px;border-bottom:1px solid var(--border2);flex-shrink:0}
+
+/* ── Search Filter Tree ── */
+.filter-tree{border-bottom:1px solid var(--border2);background:var(--surface2)}
+.filter-tree-hdr{display:flex;align-items:center;justify-content:space-between;padding:7px 13px;cursor:pointer;user-select:none;font-size:12px;font-weight:600;color:var(--text2)}
+.filter-tree-hdr:hover{background:rgba(255,255,255,.03)}
+.filter-tree-hdr .ft-arrow{font-size:10px;transition:transform .2s;color:var(--text3)}
+.filter-tree-hdr.open .ft-arrow{transform:rotate(90deg)}
+.filter-tree-body{display:none;padding:4px 0 8px 0}
+.filter-tree-body.open{display:block}
+.ft-group{margin-bottom:0}
+.ft-group-hdr{display:flex;align-items:center;gap:5px;padding:4px 13px 4px 16px;cursor:pointer;font-size:11.5px;font-weight:600;color:var(--text2);user-select:none}
+.ft-group-hdr:hover{background:rgba(255,255,255,.03)}
+.ft-group-arrow{font-size:9px;color:var(--text3);transition:transform .15s;flex-shrink:0}
+.ft-group-arrow.open{transform:rotate(90deg)}
+.ft-group-children{display:none}
+.ft-group-children.open{display:block}
+.ft-item{display:flex;align-items:center;gap:7px;padding:3px 13px 3px 30px;font-size:11px;cursor:pointer;color:var(--text3)}
+.ft-item:hover{background:rgba(255,255,255,.03);color:var(--text)}
+.ft-item input[type=checkbox]{width:12px;height:12px;accent-color:var(--accent);flex-shrink:0;cursor:pointer}
+.ft-item label{cursor:pointer;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ft-item .ft-cnt{font-size:9.5px;color:var(--text3);flex-shrink:0;background:var(--surface);padding:1px 5px;border-radius:8px;border:1px solid var(--border2)}
+.filter-chips{display:flex;flex-wrap:wrap;gap:4px;padding:6px 13px;min-height:0;border-bottom:1px solid var(--border2)}
+.filter-chip{display:flex;align-items:center;gap:4px;font-size:10.5px;background:var(--accent-dim);color:var(--info);border:1px solid var(--accent);border-radius:10px;padding:2px 7px;cursor:pointer}
+.filter-chip:hover{background:rgba(56,139,253,.25)}
+.filter-chip .chip-x{font-size:11px;line-height:1;opacity:.7}
 .search-input{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12.5px;outline:none;font-family:inherit;transition:border-color .15s}
 .search-input:focus{border-color:var(--accent)}
 .search-meta{padding:5px 13px;font-size:10.5px;color:var(--text3);border-bottom:1px solid var(--border2)}
@@ -182,10 +207,10 @@ select.form-input{cursor:pointer}
 
 <!-- ─────────────── Stats ─────────────── -->
 <div class="stats" id="stats" style="display:none">
-  <div class="stat"><div class="stat-val" id="s-jobs">0</div><div class="stat-lbl">전체 잡</div></div>
+  <div class="stat"><div class="stat-val" id="s-jobs">0</div><div class="stat-lbl">전체 배치</div></div>
   <div class="stat"><div class="stat-val" id="s-edges">0</div><div class="stat-lbl">의존성</div></div>
-  <div class="stat"><div class="stat-val s" id="s-roots">0</div><div class="stat-lbl">시작 잡</div></div>
-  <div class="stat"><div class="stat-val i" id="s-leaves">0</div><div class="stat-lbl">종료 잡</div></div>
+  <div class="stat"><div class="stat-val s" id="s-roots">0</div><div class="stat-lbl">시작 배치</div></div>
+  <div class="stat"><div class="stat-val i" id="s-leaves">0</div><div class="stat-lbl">종료 배치</div></div>
 </div>
 
 <div class="body">
@@ -194,7 +219,7 @@ select.form-input{cursor:pointer}
   <aside class="sidebar">
     <div class="tabs" id="tabs">
       <button class="tab on"  data-tab="input">XML 입력</button>
-      <button class="tab" data-tab="jobs"   id="tab-jobs"   style="display:none">잡 목록</button>
+      <button class="tab" data-tab="jobs"   id="tab-jobs"   style="display:none">배치 목록</button>
       <button class="tab" data-tab="ai"     id="tab-ai"     style="display:none">AI 분석</button>
       <button class="tab" data-tab="search" id="tab-search" style="display:none">검색</button>
       <button class="tab" data-tab="detail" id="tab-detail" style="display:none">상세정보</button>
@@ -240,9 +265,19 @@ select.form-input{cursor:pointer}
     <div class="pane" id="pane-search">
       <div class="search-bar">
         <input type="text" class="search-input" id="search-inp"
-          placeholder="검색어 입력 (예: 정산, 카드, 리포트)…">
+          placeholder="검색어 입력 (배치명, 조건, 서버, 스크립트 등)…">
         <button class="btn btn-s" id="btn-search" style="padding:0 10px">검색</button>
       </div>
+      <!-- 필터 트리 -->
+      <div class="filter-tree" id="filter-tree">
+        <div class="filter-tree-hdr" id="filter-tree-hdr">
+          <span>🔽 필터 옵션</span>
+          <span class="ft-arrow">▶</span>
+        </div>
+        <div class="filter-tree-body" id="filter-tree-body"></div>
+      </div>
+      <!-- 선택된 필터 칩 -->
+      <div class="filter-chips" id="filter-chips" style="display:none"></div>
       <div id="search-meta" class="search-meta" style="display:none"></div>
       <div id="search-results"></div>
     </div>
@@ -279,9 +314,9 @@ select.form-input{cursor:pointer}
     </div>
     <div class="legend" id="legend">
       <div class="legend-ttl">범례</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#163020;border-color:#2ea043"></div>시작 잡</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#1a2640;border-color:#388bfd"></div>종료 잡</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#1c2330;border-color:#30363d"></div>중간 잡</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#163020;border-color:#2ea043"></div>시작 배치</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1a2640;border-color:#388bfd"></div>종료 배치</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1c2330;border-color:#30363d"></div>중간 배치</div>
     </div>
   </main>
 </div>
@@ -542,6 +577,17 @@ function fitView(){
   applyTransform();
 }
 
+// 특정 배치 노드를 화면 중앙으로 이동
+function centerOnJob(name){
+  const p=S.pos?.get(name);if(!p) return;
+  const r=svg.getBoundingClientRect();if(!r.width||!r.height) return;
+  const targetScale=Math.min(1.4, S.vt.s > 0.8 ? S.vt.s : 1.0);
+  S.vt.s=targetScale;
+  S.vt.x=(r.width/2)-(p.x+NW/2)*targetScale;
+  S.vt.y=(r.height/2)-(p.y+NH/2)*targetScale;
+  applyTransform();
+}
+
 // ── Stats & sidebar ───────────────────────────────────────────────────────────
 function updateStats(){
   const g=S.graph;
@@ -551,7 +597,7 @@ function updateStats(){
   $('s-jobs').textContent=g.jobs.length;$('s-edges').textContent=g.edges.length;
   $('s-roots').textContent=roots;$('s-leaves').textContent=leaves;
   $('stats').style.display='flex';
-  $('hdr-info').textContent=`잡 ${g.jobs.length}개 · 의존성 ${g.edges.length}개`;
+  $('hdr-info').textContent=`배치 ${g.jobs.length}개 · 의존성 ${g.edges.length}개`;
 }
 
 function jobType(name){
@@ -561,7 +607,7 @@ function jobType(name){
 
 function renderJobList(){
   const g=S.graph;if(!g) return;
-  $('tab-jobs').textContent=`잡 목록 (${g.jobs.length})`;
+  $('tab-jobs').textContent=`배치 목록 (${g.jobs.length})`;
   $('job-list').innerHTML=g.jobs.map(j=>{
     const shortDesc = j.desc ? (j.desc.length>34 ? j.desc.slice(0,33)+'…' : j.desc) : '';
     const timeStr = j.timeFrom ? j.timeFrom.replace(/^(\d{2})(\d{2})$/,'$1:$2') : '';
@@ -597,7 +643,7 @@ function renderDetail(name){
   const schedRows=[
     ['실행 서버',   job.nodeId],
     ['시작 시간',   job.timeFrom ? job.timeFrom.replace(/^(\d{2})(\d{2})$/,'$1:$2') : ''],
-    ['실행 사용자', job.runAs],
+    ['서버 계정', job.runAs],
     ['캘린더',      job.daysCal],
     ['우선순위',    job.priority],
     ['최대 대기(일)',job.maxWait],
@@ -636,8 +682,8 @@ ${pills?`<div class="pills">${pills}</div>`:''}
   <div class="dstat"><div class="dstat-val">${job.inConds.length}</div><div class="dstat-lbl">IN 조건</div></div>
   <div class="dstat"><div class="dstat-val">${job.outConds.length}</div><div class="dstat-lbl">OUT 조건</div></div>
 </div>
-${up.length?`<div class="section-title">선행 잡 (${up.length})</div><div class="dep-list">${depUp}</div>`:''}
-${dn.length?`<div class="section-title">후행 잡 (${dn.length})</div><div class="dep-list">${depDn}</div>`:''}
+${up.length?`<div class="section-title">선행 배치 (${up.length})</div><div class="dep-list">${depUp}</div>`:''}
+${dn.length?`<div class="section-title">후행 배치 (${dn.length})</div><div class="dep-list">${depDn}</div>`:''}
 ${(up.length||dn.length)?'<div class="divider"></div>':''}
 ${inT}${outT}
 ${schedTable}
@@ -680,10 +726,11 @@ function generate(xmlStr){
     $('tab-jobs').style.display='';$('tab-ai').style.display='';$('tab-search').style.display='';
     renderSVG();setTimeout(fitView,50);
     updateStats();renderJobList();
-    // Reset AI/embed state on new graph
+    // Reset AI/embed/filter/search state on new graph
     EMB.built=false;EMB.building=false;EMB.data.clear();EMB.progress=0;
     AI.text='';AI.error='';AI.running=false;AI.history=[];
     SRCH.results=[];SRCH.last='';
+    FILTER.app.clear();FILTER.sub.clear();FILTER.node.clear();
     setTab('jobs');
   }catch(e){
     $('err-msg').textContent='⚠ '+e.message;$('err-msg').style.display='block';
@@ -749,8 +796,55 @@ $('btn-zo').onclick=()=>{S.vt.s=Math.max(.1,S.vt.s*.83);applyTransform();};
 $('tabs').addEventListener('click',e=>{const t=e.target.dataset?.tab;if(t) setTab(t);});
 $('job-list').addEventListener('click',e=>{
   const item=e.target.closest('.job-item');if(!item) return;
-  const name=item.dataset.job;if(name){name===S.selected?closeDetail():selectJob(name);}
+  const name=item.dataset.job;if(!name) return;
+  // 다이어그램으로 이동 확인 팝업
+  showMoveConfirm(name);
 });
+
+function showMoveConfirm(name){
+  // 기존 팝업 제거
+  const old=$('move-confirm-popup');if(old) old.remove();
+
+  const overlay=document.createElement('div');
+  overlay.id='move-confirm-popup';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+
+  const job=S.graph?.jobs.find(j=>j.name===name);
+  const desc=job?.desc?`<div style="font-size:11.5px;color:var(--text2);margin-top:6px;line-height:1.5;max-width:340px">${esc(job.desc)}</div>`:'';
+
+  overlay.innerHTML=`
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px 24px;min-width:320px;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,.5)">
+  <div style="font-size:13.5px;font-weight:600;margin-bottom:4px">다이어그램으로 이동</div>
+  <div style="font-size:12.5px;color:var(--text2);margin-bottom:4px">선택한 배치를 다이어그램에서 확인하시겠습니까?</div>
+  <div style="font-family:var(--mono);font-size:12px;color:var(--info);background:var(--bg);padding:6px 9px;border-radius:5px;border:1px solid var(--border2);margin:10px 0;word-break:break-all">${esc(name)}</div>
+  ${desc}
+  <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+    <button id="mc-cancel" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:12.5px">취소</button>
+    <button id="mc-ok" style="padding:6px 18px;border-radius:6px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:12.5px;font-weight:600">이동</button>
+  </div>
+</div>`;
+
+  document.body.appendChild(overlay);
+
+  const close=()=>overlay.remove();
+  overlay.addEventListener('click',e=>{if(e.target===overlay) close();});
+  overlay.querySelector('#mc-cancel').onclick=close;
+  overlay.querySelector('#mc-ok').onclick=()=>{
+    close();
+    // 배치 선택 후 다이어그램 하이라이트 + 중앙 이동
+    S.selected=name;
+    renderSVG();
+    renderJobList();
+    setTimeout(()=>{centerOnJob(name);},60);
+    // 상세정보 탭 열기
+    $('tab-detail').style.display='';
+    renderDetail(name);
+    setTab('detail');
+  };
+  // ESC 키 닫기
+  const onKey=e=>{if(e.key==='Escape'){close();document.removeEventListener('keydown',onKey);}};
+  document.addEventListener('keydown',onKey);
+}
 
 // ── File upload ───────────────────────────────────────────────────────────────
 const fileInput=$('file-input'),dropzone=$('dropzone');
@@ -829,21 +923,21 @@ function buildJobText(job,graph){
   const up=(graph||S.graph).edges.filter(e=>e.to===job.name).map(e=>e.from);
   const dn=(graph||S.graph).edges.filter(e=>e.from===job.name).map(e=>e.to);
   return [
-    `잡 이름: ${job.name}`,
+    `배치 이름: ${job.name}`,
     job.desc    ?`설명: ${job.desc}`:'',
     job.app     ?`어플리케이션: ${job.app}`:'',
     job.sub     ?`서브: ${job.sub}`:'',
     job.type    ?`유형: ${job.type}`:'',
     job.nodeId  ?`실행 서버: ${job.nodeId}`:'',
     job.timeFrom?`시작 시간: ${job.timeFrom}`:'',
-    job.runAs   ?`실행 사용자: ${job.runAs}`:'',
+    job.runAs   ?`서버 계정: ${job.runAs}`:'',
     job.daysCal ?`캘린더: ${job.daysCal}`:'',
     job.memName ?`스크립트: ${job.memName}`:'',
     job.folder  ?`폴더: ${job.folder}`:'',
     job.inConds.length ?`IN 조건: ${job.inConds.map(c=>c.name).join(', ')}`:'',
     job.outConds.length?`OUT 조건: ${job.outConds.map(c=>c.name).join(', ')}`:'',
-    up.length   ?`선행 잡: ${up.join(', ')}`:'',
-    dn.length   ?`후행 잡: ${dn.join(', ')}`:'',
+    up.length   ?`선행 배치: ${up.join(', ')}`:'',
+    dn.length   ?`후행 배치: ${dn.join(', ')}`:'',
   ].filter(Boolean).join('\n');
 }
 
@@ -914,7 +1008,7 @@ function buildGraphSummary(){
   const g=S.graph;
   const roots=g.jobs.filter(j=>!g.edges.some(e=>e.to===j.name)).map(j=>j.name);
   const leaves=g.jobs.filter(j=>!g.edges.some(e=>e.from===j.name)).map(j=>j.name);
-  let s=`Control-M 배치 구조\n잡: ${g.jobs.length}개 | 의존성: ${g.edges.length}개\n시작 잡: ${roots.join(', ')}\n종료 잡: ${leaves.join(', ')}\n\n`;
+  let s=`Control-M 배치 구조\n배치: ${g.jobs.length}개 | 의존성: ${g.edges.length}개\n시작 배치: ${roots.join(', ')}\n종료 배치: ${leaves.join(', ')}\n\n`;
   for(const job of g.jobs){
     const up=g.edges.filter(e=>e.to===job.name).map(e=>e.from);
     const dn=g.edges.filter(e=>e.from===job.name).map(e=>e.to);
@@ -935,7 +1029,7 @@ async function runAnalysis(userMsg){
     AI.text='';AI.history=[];
     const summary=buildGraphSummary();
     AI.history=[
-      {role:'system',content:'당신은 Control-M 배치 잡 워크플로우 전문가입니다. 배치 구조를 분석하여 실용적이고 명확한 한국어로 답변해주세요.'},
+      {role:'system',content:'당신은 Control-M 배치 배치 워크플로우 전문가입니다. 배치 구조를 분석하여 실용적이고 명확한 한국어로 답변해주세요.'},
       {role:'user',content:`다음 Control-M 배치 구조를 분석해주세요:\n\n${summary}\n\n다음 항목으로 분석해주세요:\n1. 📋 전체 배치 흐름 요약\n2. ⚡ 병렬 처리 구간 식별\n3. ⚠️ 잠재적 위험 요소 (단일 장애점, 병목 등)\n4. 💡 최적화 및 개선 제안`},
     ];
   } else {
@@ -967,29 +1061,66 @@ async function runAnalysis(userMsg){
 //  SEARCH
 // ══════════════════════════════════════════════════════════════════════════════
 function keywordSearch(q){
-  const ql=q.toLowerCase();
-  const results=[];
-  for(const j of S.graph.jobs){
-    const text=buildJobText(j).toLowerCase();
-    if(text.includes(ql)){
-      const sc=j.name.toLowerCase().includes(ql)?0.95:j.desc?.toLowerCase().includes(ql)?0.75:0.55;
-      results.push({name:j.name,score:sc,semantic:false});
+  const ql = q.toLowerCase();
+  const g  = S.graph;
+  const filteredJobs = getFilteredJobs(); // 필터 적용
+  const results = [];
+
+  // 점수별 필드 우선순위 정의
+  const scoreFields = [
+    { fields: j => [j.name],                                    score: 0.97 }, // 배치명
+    { fields: j => j.inConds.map(c=>c.name)
+                    .concat(j.outConds.map(c=>c.name)),          score: 0.90 }, // IN/OUT 조건명
+    { fields: j => [j.desc],                                    score: 0.85 }, // 설명
+    { fields: j => [j.cmdLine],                                 score: 0.80 }, // 실행 명령(CMDLINE)
+    { fields: j => [j.memName, j.memLib],                       score: 0.78 }, // 스크립트명/경로
+    { fields: j => [j.nodeId],                                  score: 0.75 }, // 실행 서버
+    { fields: j => [j.runAs],                                   score: 0.70 }, // 서버 계정
+    { fields: j => [j.app, j.sub],                              score: 0.65 }, // APPLICATION/SUB
+    { fields: j => [j.folder],                                  score: 0.62 }, // 폴더명
+    { fields: j => [j.daysCal, j.timeFrom, j.priority, j.type],score: 0.60 }, // 기타 속성
+    // 선후행 배치명
+    { fields: j => g.edges.filter(e=>e.to===j.name||e.from===j.name).map(e=>e.condName||e.cond||''), score: 0.55 },
+  ];
+
+  for(const j of filteredJobs){
+    // 검색어가 없으면 필터에 통과한 모든 배치를 결과로
+    if(!ql){
+      results.push({name:j.name, score:0.5, semantic:false});
+      continue;
+    }
+    let bestScore = 0;
+    let matchedFields = [];
+    for(const {fields, score} of scoreFields){
+      const vals = fields(j).filter(Boolean).map(v=>v.toLowerCase());
+      if(vals.some(v => v.includes(ql))){
+        if(score > bestScore) bestScore = score;
+        matchedFields.push(score);
+      }
+    }
+    if(bestScore > 0){
+      results.push({name:j.name, score:bestScore, semantic:false});
     }
   }
-  return results.sort((a,b)=>b.score-a.score).slice(0,12);
+  return results.sort((a,b)=>b.score-a.score).slice(0,30);
 }
 
 async function semanticSearch(q){
   const qEmb=await fetchEmbeddings([q]);
+  const filtered=new Set(getFilteredJobs().map(j=>j.name));
   const results=[];
-  for(const[name,emb]of EMB.data) results.push({name,score:cosineSim(qEmb[0],emb),semantic:true});
-  return results.sort((a,b)=>b.score-a.score).slice(0,10);
+  for(const[name,emb]of EMB.data){
+    if(!filtered.has(name)) continue; // 필터 적용
+    results.push({name,score:cosineSim(qEmb[0],emb),semantic:true});
+  }
+  return results.sort((a,b)=>b.score-a.score).slice(0,15);
 }
 
 async function doSearch(){
   const q=($('search-inp').value||'').trim();
-  if(!q) return;
-  SRCH.last=q;SRCH.running=true;
+  const hasFilter=FILTER.app.size||FILTER.sub.size||FILTER.node.size;
+  if(!q && !hasFilter) return;
+  SRCH.last=q||'(필터)';SRCH.running=true;
   $('search-results').innerHTML=`<div style="padding:12px 13px;font-size:12px;color:var(--text3)">검색 중…</div>`;
   $('search-meta').style.display='none';
   try{
@@ -1013,14 +1144,34 @@ function renderSearchOutput(results){
   if(!results.length){
     $('search-results').innerHTML=`<div style="padding:14px 13px;font-size:12.5px;color:var(--text3)">검색 결과가 없습니다</div>`;return;
   }
+  const q = SRCH.last.toLowerCase();
   $('search-results').innerHTML=results.map(r=>{
     const job=S.graph?.jobs.find(j=>j.name===r.name);
-    const meta=[job?.app,job?.sub].filter(Boolean).join(' · ');
+    // 매칭된 필드 힌트 수집
+    const hints=[];
+    if(!r.semantic && job){
+      if(job.desc?.toLowerCase().includes(q))          hints.push(`설명: ${job.desc.length>30?job.desc.slice(0,29)+'…':job.desc}`);
+      if(job.cmdLine?.toLowerCase().includes(q))        hints.push(`명령: ${job.cmdLine.length>40?job.cmdLine.slice(0,39)+'…':job.cmdLine}`);
+      if(job.memName?.toLowerCase().includes(q))        hints.push(`스크립트: ${job.memName}`);
+      if(job.memLib?.toLowerCase().includes(q))         hints.push(`경로: ${job.memLib}`);
+      if(job.nodeId?.toLowerCase().includes(q))         hints.push(`서버: ${job.nodeId}`);
+      if(job.runAs?.toLowerCase().includes(q))          hints.push(`사용자: ${job.runAs}`);
+      if(job.app?.toLowerCase().includes(q))            hints.push(`APP: ${job.app}`);
+      if(job.folder?.toLowerCase().includes(q))         hints.push(`폴더: ${job.folder}`);
+      if(job.daysCal?.toLowerCase().includes(q))        hints.push(`캘린더: ${job.daysCal}`);
+      if(job.inConds.some(c=>c.name.toLowerCase().includes(q)))
+        hints.push(`IN조건: ${job.inConds.filter(c=>c.name.toLowerCase().includes(q)).map(c=>c.name).join(', ')}`);
+      if(job.outConds.some(c=>c.name.toLowerCase().includes(q)))
+        hints.push(`OUT조건: ${job.outConds.filter(c=>c.name.toLowerCase().includes(q)).map(c=>c.name).join(', ')}`);
+    }
+    const hintHtml = hints.length ? `<div style="font-size:10px;color:var(--warning);margin-top:3px;line-height:1.5">${hints.slice(0,2).map(h=>`<span style="background:rgba(210,153,34,.12);border-radius:3px;padding:1px 4px;margin-right:3px">${esc(h)}</span>`).join('')}</div>` : '';
+    const subLine = job?.desc ? (job.desc.length>32?job.desc.slice(0,31)+'…':job.desc) : [job?.app,job?.sub].filter(Boolean).join(' · ');
     return `<div class="sr-item${S.selected===r.name?' on':''}" data-job="${esc(r.name)}">
   <div class="job-dot ${jobType(r.name)}"></div>
   <div class="sr-info">
     <div class="sr-name" title="${esc(r.name)}">${esc(r.name)}</div>
-    ${meta?`<div class="sr-sub">${esc(meta)}</div>`:''}
+    ${subLine?`<div class="sr-sub">${esc(subLine)}</div>`:''}
+    ${hintHtml}
   </div>
   <span class="sr-badge ${r.semantic?'sem':''}">${r.semantic?'시맨틱':'키워드'}</span>
   <span class="sr-score">${Math.round(r.score*100)}%</span>
@@ -1030,7 +1181,7 @@ function renderSearchOutput(results){
 
 $('search-results').addEventListener('click',e=>{
   const item=e.target.closest('.sr-item');if(!item) return;
-  const name=item.dataset.job;if(name){name===S.selected?closeDetail():selectJob(name);}
+  const name=item.dataset.job;if(name) showMoveConfirm(name);
 });
 $('btn-search').onclick=doSearch;
 $('search-inp').addEventListener('keydown',e=>{if(e.key==='Enter') doSearch();});
@@ -1059,7 +1210,7 @@ function renderAIPane(){
   } else if(EMB.built){
     embStatus=`<div class="embed-bar">
   <div class="embed-row"><div class="sdot" style="color:var(--success)"></div>
-    <span style="color:var(--success);font-size:12px">임베딩 준비됨 · ${EMB.data.size}개 잡 · 시맨틱 검색 가능</span>
+    <span style="color:var(--success);font-size:12px">임베딩 준비됨 · ${EMB.data.size}개 배치 · 시맨틱 검색 가능</span>
   </div>
 </div>`;
   } else {
@@ -1095,7 +1246,7 @@ function renderAIPane(){
     </button>
   </div>
   <div style="font-size:10.5px;color:var(--text3);margin-top:8px;line-height:1.6">
-    • <b>임베딩 생성</b>: 잡 정보를 벡터화해 시맨틱 검색 활성화<br>
+    • <b>임베딩 생성</b>: 배치 정보를 벡터화해 시맨틱 검색 활성화<br>
     • <b>배치 흐름 분석</b>: AI가 전체 흐름·위험요소·개선안 분석
   </div>
 </div>
@@ -1113,8 +1264,139 @@ ${outputSection}`;
   });
 }
 
+// ── Filter state ─────────────────────────────────────────────────────────────
+const FILTER = {
+  app:    new Set(), // 선택된 APPLICATION
+  sub:    new Set(), // 선택된 SUB_APPLICATION
+  node:   new Set(), // 선택된 NODEID
+};
+
+function getFilteredJobs(){
+  const g=S.graph;if(!g) return [];
+  const hasApp  = FILTER.app.size>0;
+  const hasSub  = FILTER.sub.size>0;
+  const hasNode = FILTER.node.size>0;
+  if(!hasApp&&!hasSub&&!hasNode) return g.jobs; // 필터 없으면 전체
+  return g.jobs.filter(j=>
+    (!hasApp  || FILTER.app.has(j.app))  &&
+    (!hasSub  || FILTER.sub.has(j.sub))  &&
+    (!hasNode || FILTER.node.has(j.nodeId))
+  );
+}
+
+function renderFilterTree(){
+  const g=S.graph;if(!g){$('filter-tree').style.display='none';return;}
+  $('filter-tree').style.display='';
+
+  // 고유값 수집
+  const apps  = new Map(); // app → count
+  const subs  = new Map(); // sub → count
+  const nodes = new Map(); // nodeId → count
+  for(const j of g.jobs){
+    if(j.app)    apps.set(j.app,   (apps.get(j.app)   ||0)+1);
+    if(j.sub)    subs.set(j.sub,   (subs.get(j.sub)   ||0)+1);
+    if(j.nodeId) nodes.set(j.nodeId,(nodes.get(j.nodeId)||0)+1);
+  }
+
+  const sortedApps  = [...apps.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+  const sortedSubs  = [...subs.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+  const sortedNodes = [...nodes.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+
+  const makeGroup = (id, label, icon, entries, filterSet) => {
+    const isOpen = entries.length <= 8; // 8개 이하면 기본 열림
+    return `<div class="ft-group">
+  <div class="ft-group-hdr" data-ftg="${id}">
+    <span class="ft-group-arrow${isOpen?' open':''}">▶</span>
+    <span>${icon} ${label}</span>
+    <span style="margin-left:auto;font-size:10px;color:var(--text3);font-weight:400">${entries.length}종</span>
+  </div>
+  <div class="ft-group-children${isOpen?' open':''}" id="ftg-${id}">
+    ${entries.map(([val,cnt])=>`
+    <div class="ft-item">
+      <input type="checkbox" id="fti-${id}-${esc(val)}" data-ft="${id}" data-val="${esc(val)}"${filterSet.has(val)?' checked':''}>
+      <label for="fti-${id}-${esc(val)}" title="${esc(val)}">${esc(val)}</label>
+      <span class="ft-cnt">${cnt}</span>
+    </div>`).join('')}
+  </div>
+</div>`;
+  };
+
+  $('filter-tree-body').innerHTML =
+    makeGroup('app',  '어플리케이션', '📦', sortedApps,  FILTER.app)  +
+    makeGroup('sub',  '그룹',         '📁', sortedSubs,  FILTER.sub)  +
+    makeGroup('node', '서버',         '🖥', sortedNodes, FILTER.node);
+
+  // 그룹 헤더 클릭 - 접기/펼치기
+  $('filter-tree-body').querySelectorAll('.ft-group-hdr').forEach(hdr=>{
+    hdr.addEventListener('click',()=>{
+      const id=hdr.dataset.ftg;
+      const children=$(`ftg-${id}`);
+      const arrow=hdr.querySelector('.ft-group-arrow');
+      const open=children.classList.toggle('open');
+      arrow.classList.toggle('open',open);
+    });
+  });
+
+  // 체크박스 변경
+  $('filter-tree-body').addEventListener('change',e=>{
+    const cb=e.target;if(cb.type!=='checkbox') return;
+    const type=cb.dataset.ft, val=cb.dataset.val;
+    const set = type==='app'?FILTER.app:type==='sub'?FILTER.sub:FILTER.node;
+    cb.checked ? set.add(val) : set.delete(val);
+    renderFilterChips();
+    if(SRCH.last) doSearch();
+  });
+}
+
+function renderFilterChips(){
+  const chips=$('filter-chips');
+  const all=[
+    ...[...FILTER.app].map(v=>({type:'app',label:'APP: '+v,val:v})),
+    ...[...FILTER.sub].map(v=>({type:'sub',label:'그룹: '+v,val:v})),
+    ...[...FILTER.node].map(v=>({type:'node',label:'서버: '+v,val:v})),
+  ];
+  if(!all.length){chips.style.display='none';return;}
+  chips.style.display='flex';
+  chips.innerHTML=all.map(c=>`
+<div class="filter-chip" data-ft="${c.type}" data-val="${esc(c.val)}">
+  <span>${esc(c.label)}</span><span class="chip-x">×</span>
+</div>`).join('')+
+`<div class="filter-chip" style="background:rgba(248,81,73,.1);color:var(--danger);border-color:var(--danger)" id="chip-clear-all">
+  <span>전체 해제</span>
+</div>`;
+
+  chips.querySelectorAll('.filter-chip[data-ft]').forEach(chip=>{
+    chip.addEventListener('click',()=>{
+      const {ft:type,val}=chip.dataset;
+      const set=type==='app'?FILTER.app:type==='sub'?FILTER.sub:FILTER.node;
+      set.delete(val);
+      // 체크박스도 해제
+      const cb=$('filter-tree-body')?.querySelector(`[data-ft="${type}"][data-val="${val}"]`);
+      if(cb) cb.checked=false;
+      renderFilterChips();
+      if(SRCH.last) doSearch();
+    });
+  });
+  const clearAll=$('chip-clear-all');
+  if(clearAll) clearAll.addEventListener('click',()=>{
+    FILTER.app.clear();FILTER.sub.clear();FILTER.node.clear();
+    $('filter-tree-body').querySelectorAll('input[type=checkbox]').forEach(cb=>cb.checked=false);
+    renderFilterChips();
+    if(SRCH.last) doSearch();
+  });
+}
+
+// 필터 트리 헤더 토글
+$('filter-tree-hdr').addEventListener('click',()=>{
+  const body=$('filter-tree-body');
+  const hdr=$('filter-tree-hdr');
+  const open=body.classList.toggle('open');
+  hdr.classList.toggle('open',open);
+  hdr.querySelector('.ft-arrow').style.transform=open?'rotate(90deg)':'';
+});
+
 function renderSearchPane(){
-  // Preserve search input value, just refresh results if any
+  renderFilterTree();
   if(SRCH.results.length) renderSearchOutput(SRCH.results);
 }
 
