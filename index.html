@@ -228,12 +228,12 @@ select.form-input{cursor:pointer}
     <!-- ── XML Input ── -->
     <div class="pane on" id="pane-input">
       <div class="pane-pad">
-        <label class="dropzone" id="dropzone">
+        <div class="dropzone" id="dropzone">
           <input type="file" id="file-input" accept=".xml,.txt" style="display:none">
           <span class="dropzone-icon">📂</span>
           <span>XML 파일을 드래그하거나 클릭하여 업로드</span>
           <span style="font-size:11px;color:var(--text3)">.xml 파일 지원</span>
-        </label>
+        </div>
         <textarea id="xml-input" rows="13"
           placeholder="또는 Control-M XML을 여기에 붙여넣으세요…&#10;&#10;DEFTABLE / FOLDER / SMART_FOLDER 형식 지원"
           spellcheck="false"></textarea>
@@ -317,6 +317,8 @@ select.form-input{cursor:pointer}
       <div class="legend-item"><div class="legend-dot" style="background:#163020;border-color:#2ea043"></div>시작 배치</div>
       <div class="legend-item"><div class="legend-dot" style="background:#1a2640;border-color:#388bfd"></div>종료 배치</div>
       <div class="legend-item"><div class="legend-dot" style="background:#1c2330;border-color:#30363d"></div>중간 배치</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#2a2000;border-color:#d29922"></div>선행 경로</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#0d2a18;border-color:#3fb950"></div>후행 경로</div>
     </div>
   </main>
 </div>
@@ -510,13 +512,39 @@ function renderSVG(){
   const {graph,pos,selected}=S;
   if(!graph) return;
   svgDefs.innerHTML=`
-    <marker id="arw"    markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0L0,6L8,3z" fill="#444c56"/></marker>
-    <marker id="arw-hi" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0L0,6L8,3z" fill="#388bfd"/></marker>`;
+    <marker id="arw"       markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0L0,6L8,3z" fill="#444c56"/></marker>
+    <marker id="arw-hi"    markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0L0,6L8,3z" fill="#388bfd"/></marker>
+    <marker id="arw-up"    markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0L0,6L8,3z" fill="#d29922"/></marker>
+    <marker id="arw-down"  markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0L0,6L8,3z" fill="#3fb950"/></marker>`;
   const conn=new Set(),hiE=new Set();
+  const upstream=new Set(),downstream=new Set();
   if(selected){
     conn.add(selected);
-    for(const e of graph.edges){
-      if(e.from===selected||e.to===selected){conn.add(e.from);conn.add(e.to);hiE.add(e.from+'→'+e.to);}
+
+    // 후행(downstream): BFS forward — 선택 노드 → 끝 배치까지 전체 경로
+    const qDown=[selected];
+    while(qDown.length){
+      const cur=qDown.shift();
+      for(const e of graph.edges){
+        if(e.from===cur && !downstream.has(e.to)){
+          downstream.add(e.to);conn.add(e.to);
+          hiE.add(e.from+'→'+e.to);
+          qDown.push(e.to);
+        }
+      }
+    }
+
+    // 선행(upstream): BFS backward — 시작 배치 → 선택 노드까지 경로
+    const qUp=[selected];
+    while(qUp.length){
+      const cur=qUp.shift();
+      for(const e of graph.edges){
+        if(e.to===cur && !upstream.has(e.from)){
+          upstream.add(e.from);conn.add(e.from);
+          hiE.add(e.from+'→'+e.to);
+          qUp.push(e.from);
+        }
+      }
     }
   }
   let eH='',nH='',lH='';
@@ -525,11 +553,16 @@ function renderSVG(){
     if(!sp||!tp) continue;
     const sx=sp.x+NW,sy=sp.y+NH/2,tx=tp.x,ty=tp.y+NH/2,mx=(sx+tx)/2;
     const key=e.from+'→'+e.to,isHi=hiE.has(key),dim=selected&&!isHi;
-    eH+=`<path d="M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}" fill="none" stroke="${isHi?'#388bfd':'#444c56'}" stroke-width="${isHi?2:1.5}" opacity="${dim?.15:1}" marker-end="url(#${isHi?'arw-hi':'arw'})"/>`;
+    // 선행 에지=노랑, 후행 에지=초록, 직접 연결=파랑
+    const isUpEdge   = isHi && upstream.has(e.from)   && (upstream.has(e.to)   || e.to===selected);
+    const isDownEdge = isHi && downstream.has(e.to)   && (downstream.has(e.from)|| e.from===selected);
+    const edgeColor  = isUpEdge?'#d29922':isDownEdge?'#3fb950':'#388bfd';
+    const arwId      = isUpEdge?'arw-up':isDownEdge?'arw-down':isHi?'arw-hi':'arw';
+    eH+=`<path d="M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}" fill="none" stroke="${isHi?edgeColor:'#444c56'}" stroke-width="${isHi?2.2:1.5}" opacity="${dim?.12:1}" marker-end="url(#${arwId})"/>`;
     if(isHi){
       const lx=(sx+tx)/2,ly=(sy+ty)/2,tw=e.cond.length*5.4+14;
       lH+=`<rect x="${lx-tw/2}" y="${ly-15}" width="${tw}" height="14" rx="3" fill="#0f1117" fill-opacity=".92"/>
-           <text x="${lx}" y="${ly-5}" text-anchor="middle" font-size="9.5" fill="#8b949e" font-family="monospace">${esc(e.cond)}</text>`;
+           <text x="${lx}" y="${ly-5}" text-anchor="middle" font-size="9.5" fill="${edgeColor}" font-family="monospace">${esc(e.cond)}</text>`;
     }
   }
   for(const job of graph.jobs){
@@ -537,8 +570,21 @@ function renderSVG(){
     const isRoot=!graph.edges.some(e=>e.to===job.name);
     const isLeaf=!graph.edges.some(e=>e.from===job.name);
     const isSel=job.name===selected,isConn=conn.has(job.name),dim=selected&&!isConn;
-    const fill=isSel?'#388bfd':isRoot?'#163020':isLeaf?'#1a2640':'#1c2330';
-    const stroke=isSel?'#388bfd':(isConn&&selected)?'#388bfd':isRoot?'#2ea043':isLeaf?'#388bfd':'#30363d';
+    const isUp=upstream.has(job.name),isDown=downstream.has(job.name);
+    // fill: 선택=파랑, 선행=노랑계열, 후행=초록계열, 기본=원래색
+    const fill = isSel   ? '#1a3a6b'
+               : isUp    ? '#2a2000'
+               : isDown  ? '#0d2a18'
+               : isRoot  ? '#163020'
+               : isLeaf  ? '#1a2640'
+               : '#1c2330';
+    const stroke = isSel   ? '#388bfd'
+                 : isUp    ? '#d29922'
+                 : isDown  ? '#3fb950'
+                 : (isConn&&selected) ? '#388bfd'
+                 : isRoot  ? '#2ea043'
+                 : isLeaf  ? '#388bfd'
+                 : '#30363d';
     const label=job.name.length>25?job.name.slice(0,24)+'…':job.name;
     // 설명 > 앱/서브 순으로 보조 텍스트 결정
     const rawMeta = job.desc || [job.app,job.sub].filter(Boolean).join(' · ');
@@ -555,10 +601,12 @@ function renderSVG(){
     if(job.timeFrom){badges+=`<text x="${infoLeft}" y="${infoY}" font-size="9" fill="${isSel?'#ffffffaa':'#d2992288'}" style="pointer-events:none">${esc(job.timeFrom)}</text>`;infoLeft+=36;}
     if(job.inConds.length){badges+=`<text x="${p.x+NW-52}" y="${infoY}" font-size="9" fill="${isSel?'#ffffffbb':'#388bfdaa'}" font-weight="600" style="pointer-events:none">IN ${job.inConds.length}</text>`;}
     if(job.outConds.length){badges+=`<text x="${p.x+NW-26}" y="${infoY}" font-size="9" fill="${isSel?'#ffffffbb':'#3fb950aa'}" font-weight="600" style="pointer-events:none">OUT ${job.outConds.length}</text>`;}
-    nH+=`<g class="jn" data-job="${esc(job.name)}" style="cursor:pointer" opacity="${dim?.22:1}">
-  <rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="7" fill="${fill}" stroke="${stroke}" stroke-width="${(isSel||(isConn&&selected))?2:1.5}"/>
-  <text x="${p.x+NW/2}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="${isSel?700:600}" fill="${isSel?'#fff':'#e6edf3'}" font-family="monospace" style="pointer-events:none">${esc(label)}</text>
-  ${metaS?`<text x="${p.x+NW/2}" y="${metaY}" text-anchor="middle" font-size="9" fill="${isSel?'#ffffffaa':'#8b949e'}" style="pointer-events:none">${esc(metaS)}</text>`:''}
+    const nameColor = isSel?'#fff':isUp?'#f0c030':isDown?'#56d364':'#e6edf3';
+    const metaColor = isSel?'#ffffffaa':isUp?'#d29922aa':isDown?'#3fb950aa':'#8b949e';
+    nH+=`<g class="jn" data-job="${esc(job.name)}" style="cursor:pointer" opacity="${dim?.18:1}">
+  <rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="7" fill="${fill}" stroke="${stroke}" stroke-width="${(isSel||isUp||isDown)?2:1.5}"/>
+  <text x="${p.x+NW/2}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="${(isSel||isUp||isDown)?700:600}" fill="${nameColor}" font-family="monospace" style="pointer-events:none">${esc(label)}</text>
+  ${metaS?`<text x="${p.x+NW/2}" y="${metaY}" text-anchor="middle" font-size="9" fill="${metaColor}" style="pointer-events:none">${esc(metaS)}</text>`:''}
   ${badges}
 </g>`;
   }
