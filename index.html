@@ -95,16 +95,37 @@ svg#diagram.panning{cursor:grabbing}
 .ctrl.on{display:flex}
 .ctrl-btn{width:31px;height:31px;background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .1s;line-height:1}
 .ctrl-btn:hover{background:var(--surface2);color:var(--text)}
-.focus-bar{position:absolute;left:13px;top:13px;display:none;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--warning);border-radius:8px;padding:5px 11px;z-index:10;font-size:12px;color:var(--warning)}
-.focus-bar.on{display:flex}
-.focus-name{font-family:var(--mono);font-size:11.5px;color:var(--text);background:var(--bg);padding:2px 7px;border-radius:4px;border:1px solid var(--border2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.focus-cnt{font-size:10.5px;color:var(--text3)}
 .focus-reset{background:none;border:1px solid var(--border);color:var(--text2);border-radius:5px;padding:2px 9px;cursor:pointer;font-size:11.5px;transition:background .12s}
 .focus-reset:hover{background:var(--surface2);color:var(--text)}
-/* 배치 목록 필터 드롭다운 */
-.batch-filter-bar{padding:8px 13px 4px;border-bottom:1px solid var(--border2);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.batch-filter-sel{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:3px 7px;font-size:11.5px;cursor:pointer;flex:1;min-width:0}
-.batch-filter-sel:focus{outline:none;border-color:var(--accent)}
+/* ── Focus Tree ── */
+#focus-tree-panel{border-bottom:2px solid var(--border);background:var(--surface2);max-height:320px;display:flex;flex-direction:column}
+.ftree-hdr{display:flex;align-items:center;justify-content:space-between;padding:7px 12px 5px;flex-shrink:0}
+.ftree-search-wrap{position:relative;padding:0 10px 6px;flex-shrink:0}
+.ftree-search{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 28px 5px 10px;font-size:12px;outline:none;font-family:inherit;transition:border-color .15s}
+.ftree-search:focus{border-color:var(--accent)}
+.ftree-search-clear{position:absolute;right:18px;top:50%;transform:translateY(-50%);color:var(--text3);cursor:pointer;font-size:13px;line-height:1}
+.ftree-search-clear:hover{color:var(--text)}
+#ftree-body{overflow-y:auto;flex:1;padding-bottom:4px}
+/* 트리 앱 그룹 */
+.ftg-app{border-bottom:1px solid var(--border2)}
+.ftg-app-hdr{display:flex;align-items:center;gap:5px;padding:5px 12px;cursor:pointer;user-select:none;font-size:11.5px;font-weight:700;color:var(--text)}
+.ftg-app-hdr:hover{background:rgba(255,255,255,.03)}
+.ftg-app-arrow{font-size:9px;color:var(--text3);transition:transform .15s;flex-shrink:0}
+.ftg-app-arrow.open{transform:rotate(90deg)}
+/* 트리 서브 그룹 */
+.ftg-sub{margin:0}
+.ftg-sub-hdr{display:flex;align-items:center;gap:5px;padding:3px 12px 3px 24px;cursor:pointer;user-select:none;font-size:11px;font-weight:600;color:var(--text2)}
+.ftg-sub-hdr:hover{background:rgba(255,255,255,.03)}
+.ftg-sub-arrow{font-size:8px;color:var(--text3);transition:transform .15s;flex-shrink:0}
+.ftg-sub-arrow.open{transform:rotate(90deg)}
+/* 트리 배치 아이템 */
+.ftg-job{display:flex;align-items:center;gap:7px;padding:4px 12px 4px 36px;cursor:pointer;font-size:11px;color:var(--text3);transition:background .1s}
+.ftg-job:hover{background:rgba(56,139,253,.1);color:var(--text)}
+.ftg-job.focused{background:rgba(56,139,253,.18);color:var(--info);font-weight:600}
+.ftg-job-name{font-family:var(--mono);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ftg-job-desc{font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px}
+.ftg-job-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.ftg-no-result{padding:12px 13px;font-size:12px;color:var(--text3);text-align:center}
 .ctrl-sep{height:1px;background:var(--border2)}
 .legend{position:absolute;left:13px;bottom:13px;display:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;z-index:10;font-size:11.5px}
 .legend.on{display:flex;flex-direction:column;gap:5px}
@@ -212,6 +233,7 @@ select.form-input{cursor:pointer}
   <span class="hdr-title">Control-M 배치 선후행 다이어그램</span>
   <span class="hdr-badge">Beta</span>
   <span class="hdr-info" id="hdr-info"></span>
+  <button class="hdr-icon-btn" id="btn-export-xl" title="엑셀 내보내기" style="display:none;font-size:14px">📥</button>
   <button class="hdr-icon-btn" id="btn-settings" title="API 설정">⚙</button>
 </header>
 
@@ -258,13 +280,17 @@ select.form-input{cursor:pointer}
 
     <!-- ── Job List ── -->
     <div class="pane" id="pane-jobs">
-      <!-- 배치 선택 드롭다운 + 포커스 버튼 -->
-      <div class="batch-filter-bar" id="batch-filter-bar" style="display:none">
-        <select class="batch-filter-sel" id="batch-quick-sel">
-          <option value="">— 배치 선택하여 포커스 —</option>
-        </select>
-        <button class="btn btn-s" id="btn-focus-sel" style="padding:0 8px;height:26px;font-size:11.5px" title="선택 배치만 보기">포커스</button>
-        <button class="btn btn-g" id="btn-all-view" style="padding:0 8px;height:26px;font-size:11.5px">전체</button>
+      <!-- 배치 선택 트리 패널 -->
+      <div id="focus-tree-panel" style="display:none">
+        <div class="ftree-hdr">
+          <span style="font-size:12px;font-weight:600;color:var(--text2)">🔍 포커스 선택</span>
+          <button class="btn btn-g" id="btn-all-view" style="padding:0 8px;height:24px;font-size:11px">전체 보기</button>
+        </div>
+        <div class="ftree-search-wrap">
+          <input type="text" id="ftree-search" class="ftree-search" placeholder="배치명 / 설명 검색…" autocomplete="off">
+          <span class="ftree-search-clear" id="ftree-search-clear" style="display:none">✕</span>
+        </div>
+        <div id="ftree-body"></div>
       </div>
       <div class="list-legend">
         <span><span class="ldot" style="background:var(--success)"></span>시작</span>
@@ -325,12 +351,6 @@ select.form-input{cursor:pointer}
       <g id="dag-root"></g>
     </svg>
     <!-- 포커스 모드 표시 바 (좌상단) -->
-    <div class="focus-bar" id="focus-bar">
-      <span>🔍 포커스</span>
-      <span class="focus-name" id="focus-name"></span>
-      <span class="focus-cnt" id="focus-cnt"></span>
-      <button class="focus-reset" id="btn-focus-reset">전체 보기</button>
-    </div>
     <div class="ctrl" id="ctrl">
       <button class="ctrl-btn" id="btn-fit" title="화면 맞추기">⊡</button>
       <div class="ctrl-sep"></div>
@@ -677,19 +697,14 @@ function setFocus(name){
   const set=buildReachableSet(name);
   S.focusSet=set; S.focusName=name;
   renderSVG(); setTimeout(fitView,50);
-  // 포커스 바 업데이트
-  $('focus-bar').classList.add('on');
-  $('focus-name').textContent=name;
-  $('focus-cnt').textContent=`${set.size}개 배치`;
-  // 드롭다운 값 동기화
-  $('batch-quick-sel').value=name;
+  // 트리 하이라이트 갱신
+  renderFocusTree(ftreeQuery);
 }
 
 function clearFocus(){
   S.focusSet=null; S.focusName=null;
   renderSVG(); setTimeout(fitView,50);
-  $('focus-bar').classList.remove('on');
-  $('batch-quick-sel').value='';
+  renderFocusTree(ftreeQuery);
 }
 
 // 특정 배치 노드를 화면 중앙으로 이동
@@ -720,16 +735,144 @@ function jobType(name){
   return !g.edges.some(e=>e.to===name)?'r':!g.edges.some(e=>e.from===name)?'l':'m';
 }
 
-function updateBatchQuickSel(){
+// ── 포커스 트리 렌더 ─────────────────────────────────────────────────────────
+let ftreeQuery = '';
+
+function updateBatchQuickSel(){ renderFocusTree(''); }
+
+function renderFocusTree(q){
   const g=S.graph;
-  const sel=$('batch-quick-sel');
-  const bar=$('batch-filter-bar');
-  if(!g){bar.style.display='none';return;}
-  bar.style.display='flex';
-  const prev=sel.value;
-  sel.innerHTML='<option value="">— 배치 선택하여 포커스 —</option>'+
-    g.jobs.map(j=>`<option value="${esc(j.name)}">${esc(j.name)}${j.desc?' · '+j.desc.slice(0,20):''}</option>`).join('');
-  if(prev) sel.value=prev;
+  const panel=$('focus-tree-panel');
+  if(!g){panel.style.display='none';return;}
+  panel.style.display='flex';
+  ftreeQuery=q.toLowerCase();
+
+  // APPLICATION → SUB_APPLICATION → jobs 트리 구성
+  const tree=new Map(); // app → Map(sub → jobs[])
+  for(const j of g.jobs){
+    const app=j.app||'(미분류)';
+    const sub=j.sub||'(미분류)';
+    if(!tree.has(app)) tree.set(app,new Map());
+    const subMap=tree.get(app);
+    if(!subMap.has(sub)) subMap.set(sub,[]);
+    subMap.get(sub).push(j);
+  }
+
+  // 검색 필터 적용
+  const matchJob=j=>{
+    if(!ftreeQuery) return true;
+    return j.name.toLowerCase().includes(ftreeQuery)||
+           (j.desc||'').toLowerCase().includes(ftreeQuery)||
+           (j.nodeId||'').toLowerCase().includes(ftreeQuery);
+  };
+
+  const jobDotColor=name=>{
+    const g2=S.graph;
+    const isRoot=!g2.edges.some(e=>e.to===name);
+    const isLeaf=!g2.edges.some(e=>e.from===name);
+    return isRoot?'#3fb950':isLeaf?'#388bfd':'#d29922';
+  };
+
+  let html='';
+  let totalVisible=0;
+
+  for(const [app,subMap] of [...tree].sort((a,b)=>a[0].localeCompare(b[0]))){
+    let appHtml='';
+    let appCount=0;
+
+    for(const [sub,jobs] of [...subMap].sort((a,b)=>a[0].localeCompare(b[0]))){
+      const visible=jobs.filter(matchJob);
+      if(!visible.length) continue;
+      appCount+=visible.length; totalVisible+=visible.length;
+
+      const subId=`ftgsub-${btoa(unescape(encodeURIComponent(app+sub))).slice(0,12)}`;
+      const isSubOpen=!ftreeQuery?true:true; // 검색 중엔 항상 펼침
+
+      const jobsHtml=visible.map(j=>{
+        const isFoc=S.focusName===j.name;
+        const dot=jobDotColor(j.name);
+        const descShort=j.desc?(j.desc.length>22?j.desc.slice(0,21)+'…':j.desc):'';
+        return `<div class="ftg-job${isFoc?' focused':''}" data-focus="${esc(j.name)}" title="${esc(j.name)}${j.desc?' - '+j.desc:''}">
+  <span class="ftg-job-dot" style="background:${dot}"></span>
+  <span class="ftg-job-name">${highlightMatch(j.name,ftreeQuery)}</span>
+  ${descShort?`<span class="ftg-job-desc">${highlightMatch(descShort,ftreeQuery)}</span>`:''}
+</div>`;
+      }).join('');
+
+      appHtml+=`<div class="ftg-sub">
+  <div class="ftg-sub-hdr" data-ftgsub="${subId}">
+    <span class="ftg-sub-arrow open">▶</span>
+    <span>📁 ${esc(sub)}</span>
+    <span style="margin-left:auto;font-size:10px;color:var(--text3)">${visible.length}</span>
+  </div>
+  <div id="${subId}">${jobsHtml}</div>
+</div>`;
+    }
+
+    if(!appCount) continue;
+
+    const appId=`ftgapp-${btoa(unescape(encodeURIComponent(app))).slice(0,12)}`;
+    const isAppOpen=tree.size===1||!!ftreeQuery||appCount<=20;
+
+    html+=`<div class="ftg-app">
+  <div class="ftg-app-hdr" data-ftgapp="${appId}">
+    <span class="ftg-app-arrow${isAppOpen?' open':''}">▶</span>
+    <span>📦 ${esc(app)}</span>
+    <span style="margin-left:auto;font-size:10px;color:var(--text3)">${appCount}개</span>
+  </div>
+  <div id="${appId}"${isAppOpen?'':' style="display:none"'}>${appHtml}</div>
+</div>`;
+  }
+
+  if(!totalVisible && ftreeQuery){
+    html=`<div class="ftg-no-result">검색 결과 없음: "${esc(ftreeQuery)}"</div>`;
+  }
+
+  $('ftree-body').innerHTML=html;
+
+  // 앱 그룹 토글
+  $('ftree-body').querySelectorAll('.ftg-app-hdr').forEach(hdr=>{
+    hdr.addEventListener('click',()=>{
+      const id=hdr.dataset.ftgapp;
+      const body=$(id);
+      const arrow=hdr.querySelector('.ftg-app-arrow');
+      const open=body.style.display==='none';
+      body.style.display=open?'':'none';
+      arrow.classList.toggle('open',open);
+    });
+  });
+
+  // 서브 그룹 토글
+  $('ftree-body').querySelectorAll('.ftg-sub-hdr').forEach(hdr=>{
+    hdr.addEventListener('click',()=>{
+      const id=hdr.dataset.ftgsub;
+      const body=$(id);
+      const arrow=hdr.querySelector('.ftg-sub-arrow');
+      const open=body.style.display==='none'||body.style.display==='';
+      // toggle visibility
+      const isHidden=body.style.display==='none';
+      body.style.display=isHidden?'':'none';
+      arrow.classList.toggle('open',isHidden);
+    });
+  });
+
+  // 배치 클릭 → 포커스
+  $('ftree-body').querySelectorAll('.ftg-job').forEach(item=>{
+    item.addEventListener('click',()=>{
+      const name=item.dataset.focus;
+      if(name===S.focusName){ clearFocus(); }
+      else{ setFocus(name); }
+    });
+  });
+}
+
+function highlightMatch(text, q){
+  if(!q) return esc(text);
+  const idx=text.toLowerCase().indexOf(q);
+  if(idx<0) return esc(text);
+  return esc(text.slice(0,idx))
+    +`<mark style="background:#d2992244;color:inherit;border-radius:2px">${esc(text.slice(idx,idx+q.length))}</mark>`
+    +esc(text.slice(idx+q.length));
 }
 
 function renderJobList(){
@@ -863,7 +1006,7 @@ function generate(xmlStr){
     AI.text='';AI.error='';AI.running=false;AI.history=[];
     SRCH.results=[];SRCH.last='';
     FILTER.app.clear();FILTER.sub.clear();FILTER.node.clear();
-    S.focusSet=null;S.focusName=null;$('focus-bar').classList.remove('on');
+    S.focusSet=null;S.focusName=null;
     setTab('jobs');
   }catch(e){
     $('err-msg').textContent='⚠ '+e.message;$('err-msg').style.display='block';
@@ -926,10 +1069,20 @@ $('btn-back').onclick=()=>setTab('input');
 $('btn-fit').onclick=fitView;
 $('btn-zi').onclick=()=>{S.vt.s=Math.min(3,S.vt.s*1.2);applyTransform();};
 $('btn-zo').onclick=()=>{S.vt.s=Math.max(.1,S.vt.s*.83);applyTransform();};
-$('btn-focus-reset').onclick=clearFocus;
-$('btn-focus-sel').onclick=()=>{ const v=$('batch-quick-sel').value; if(v) setFocus(v); };
 $('btn-all-view').onclick=clearFocus;
-$('batch-quick-sel').addEventListener('change',e=>{ if(e.target.value) setFocus(e.target.value); });
+
+// 트리 검색 입력
+$('ftree-search').addEventListener('input',e=>{
+  const q=e.target.value;
+  $('ftree-search-clear').style.display=q?'':'none';
+  renderFocusTree(q);
+});
+$('ftree-search-clear').addEventListener('click',()=>{
+  $('ftree-search').value='';
+  $('ftree-search-clear').style.display='none';
+  renderFocusTree('');
+  $('ftree-search').focus();
+});
 $('tabs').addEventListener('click',e=>{const t=e.target.dataset?.tab;if(t) setTab(t);});
 $('job-list').addEventListener('click',e=>{
   const item=e.target.closest('.job-item');if(!item) return;
@@ -968,11 +1121,20 @@ function showMoveConfirm(name){
   overlay.querySelector('#mc-cancel').onclick=close;
   overlay.querySelector('#mc-ok').onclick=()=>{
     close();
-    // 배치 선택 후 다이어그램 하이라이트 + 중앙 이동
     S.selected=name;
+
+    // 포커스 모드가 켜져 있으면 해당 배치가 보이도록 포커스를 갱신
+    if(S.focusSet && !S.focusSet.has(name)){
+      // 클릭한 배치가 현재 포커스 범위 밖 → 해당 배치로 포커스 전환
+      const set=buildReachableSet(name);
+      S.focusSet=set; S.focusName=name;
+      renderFocusTree(ftreeQuery);
+    }
+
     renderSVG();
     renderJobList();
-    setTimeout(()=>{centerOnJob(name);},60);
+    // SVG 레이아웃 완료 후 이동 (포커스 재계산 포함)
+    setTimeout(()=>{centerOnJob(name);},120);
     // 상세정보 탭 열기
     $('tab-detail').style.display='';
     renderDetail(name);
