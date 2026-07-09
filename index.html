@@ -95,6 +95,37 @@ svg#diagram.panning{cursor:grabbing}
 .ctrl.on{display:flex}
 .ctrl-btn{width:31px;height:31px;background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .1s;line-height:1}
 .ctrl-btn:hover{background:var(--surface2);color:var(--text)}
+.focus-reset{background:none;border:1px solid var(--border);color:var(--text2);border-radius:5px;padding:2px 9px;cursor:pointer;font-size:11.5px;transition:background .12s}
+.focus-reset:hover{background:var(--surface2);color:var(--text)}
+/* ── Focus Tree ── */
+#focus-tree-panel{border-bottom:2px solid var(--border);background:var(--surface2);max-height:320px;display:flex;flex-direction:column}
+.ftree-hdr{display:flex;align-items:center;justify-content:space-between;padding:7px 12px 5px;flex-shrink:0}
+.ftree-search-wrap{position:relative;padding:0 10px 6px;flex-shrink:0}
+.ftree-search{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 28px 5px 10px;font-size:12px;outline:none;font-family:inherit;transition:border-color .15s}
+.ftree-search:focus{border-color:var(--accent)}
+.ftree-search-clear{position:absolute;right:18px;top:50%;transform:translateY(-50%);color:var(--text3);cursor:pointer;font-size:13px;line-height:1}
+.ftree-search-clear:hover{color:var(--text)}
+#ftree-body{overflow-y:auto;flex:1;padding-bottom:4px}
+/* 트리 앱 그룹 */
+.ftg-app{border-bottom:1px solid var(--border2)}
+.ftg-app-hdr{display:flex;align-items:center;gap:5px;padding:5px 12px;cursor:pointer;user-select:none;font-size:11.5px;font-weight:700;color:var(--text)}
+.ftg-app-hdr:hover{background:rgba(255,255,255,.03)}
+.ftg-app-arrow{font-size:9px;color:var(--text3);transition:transform .15s;flex-shrink:0}
+.ftg-app-arrow.open{transform:rotate(90deg)}
+/* 트리 서브 그룹 */
+.ftg-sub{margin:0}
+.ftg-sub-hdr{display:flex;align-items:center;gap:5px;padding:3px 12px 3px 24px;cursor:pointer;user-select:none;font-size:11px;font-weight:600;color:var(--text2)}
+.ftg-sub-hdr:hover{background:rgba(255,255,255,.03)}
+.ftg-sub-arrow{font-size:8px;color:var(--text3);transition:transform .15s;flex-shrink:0}
+.ftg-sub-arrow.open{transform:rotate(90deg)}
+/* 트리 배치 아이템 */
+.ftg-job{display:flex;align-items:center;gap:7px;padding:4px 12px 4px 36px;cursor:pointer;font-size:11px;color:var(--text3);transition:background .1s}
+.ftg-job:hover{background:rgba(56,139,253,.1);color:var(--text)}
+.ftg-job.focused{background:rgba(56,139,253,.18);color:var(--info);font-weight:600}
+.ftg-job-name{font-family:var(--mono);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ftg-job-desc{font-size:10px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px}
+.ftg-job-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.ftg-no-result{padding:12px 13px;font-size:12px;color:var(--text3);text-align:center}
 .ctrl-sep{height:1px;background:var(--border2)}
 .legend{position:absolute;left:13px;bottom:13px;display:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;z-index:10;font-size:11.5px}
 .legend.on{display:flex;flex-direction:column;gap:5px}
@@ -202,6 +233,7 @@ select.form-input{cursor:pointer}
   <span class="hdr-title">Control-M 배치 선후행 다이어그램</span>
   <span class="hdr-badge">Beta</span>
   <span class="hdr-info" id="hdr-info"></span>
+  <button class="hdr-icon-btn" id="btn-export-xl" title="엑셀 내보내기" style="display:none;font-size:14px">📥</button>
   <button class="hdr-icon-btn" id="btn-settings" title="API 설정">⚙</button>
 </header>
 
@@ -228,12 +260,12 @@ select.form-input{cursor:pointer}
     <!-- ── XML Input ── -->
     <div class="pane on" id="pane-input">
       <div class="pane-pad">
-        <label class="dropzone" id="dropzone">
+        <div class="dropzone" id="dropzone">
           <input type="file" id="file-input" accept=".xml,.txt" style="display:none">
           <span class="dropzone-icon">📂</span>
           <span>XML 파일을 드래그하거나 클릭하여 업로드</span>
           <span style="font-size:11px;color:var(--text3)">.xml 파일 지원</span>
-        </label>
+        </div>
         <textarea id="xml-input" rows="13"
           placeholder="또는 Control-M XML을 여기에 붙여넣으세요…&#10;&#10;DEFTABLE / FOLDER / SMART_FOLDER 형식 지원"
           spellcheck="false"></textarea>
@@ -248,6 +280,18 @@ select.form-input{cursor:pointer}
 
     <!-- ── Job List ── -->
     <div class="pane" id="pane-jobs">
+      <!-- 배치 선택 트리 패널 -->
+      <div id="focus-tree-panel" style="display:none">
+        <div class="ftree-hdr">
+          <span style="font-size:12px;font-weight:600;color:var(--text2)">🔍 포커스 선택</span>
+          <button class="btn btn-g" id="btn-all-view" style="padding:0 8px;height:24px;font-size:11px">전체 보기</button>
+        </div>
+        <div class="ftree-search-wrap">
+          <input type="text" id="ftree-search" class="ftree-search" placeholder="배치명 / 설명 검색…" autocomplete="off">
+          <span class="ftree-search-clear" id="ftree-search-clear" style="display:none">✕</span>
+        </div>
+        <div id="ftree-body"></div>
+      </div>
       <div class="list-legend">
         <span><span class="ldot" style="background:var(--success)"></span>시작</span>
         <span><span class="ldot" style="background:var(--info)"></span>종료</span>
@@ -306,6 +350,7 @@ select.form-input{cursor:pointer}
       <defs id="svg-defs"></defs>
       <g id="dag-root"></g>
     </svg>
+    <!-- 포커스 모드 표시 바 (좌상단) -->
     <div class="ctrl" id="ctrl">
       <button class="ctrl-btn" id="btn-fit" title="화면 맞추기">⊡</button>
       <div class="ctrl-sep"></div>
@@ -317,6 +362,8 @@ select.form-input{cursor:pointer}
       <div class="legend-item"><div class="legend-dot" style="background:#163020;border-color:#2ea043"></div>시작 배치</div>
       <div class="legend-item"><div class="legend-dot" style="background:#1a2640;border-color:#388bfd"></div>종료 배치</div>
       <div class="legend-item"><div class="legend-dot" style="background:#1c2330;border-color:#30363d"></div>중간 배치</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#2a2000;border-color:#d29922"></div>선행 경로</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#0d2a18;border-color:#3fb950"></div>후행 경로</div>
     </div>
   </main>
 </div>
@@ -371,6 +418,8 @@ const NW=220, NH=68, RG=140, NG=58, PAD=50;
 const S = {
   graph: null, pos: null, selected: null, tab: 'input',
   vt: {x:60,y:40,s:1}, panStart: null, panned: false,
+  focusSet: null,   // null=전체, Set=포커스 배치 집합
+  focusName: null,  // 포커스 기준 배치명
 };
 
 // ── API config (localStorage-backed) ─────────────────────────────────────────
@@ -510,35 +559,82 @@ function renderSVG(){
   const {graph,pos,selected}=S;
   if(!graph) return;
   svgDefs.innerHTML=`
-    <marker id="arw"    markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0L0,6L8,3z" fill="#444c56"/></marker>
-    <marker id="arw-hi" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0L0,6L8,3z" fill="#388bfd"/></marker>`;
+    <marker id="arw"       markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0L0,6L8,3z" fill="#444c56"/></marker>
+    <marker id="arw-hi"    markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0L0,6L8,3z" fill="#388bfd"/></marker>
+    <marker id="arw-up"    markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0L0,6L8,3z" fill="#d29922"/></marker>
+    <marker id="arw-down"  markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0L0,6L8,3z" fill="#3fb950"/></marker>`;
   const conn=new Set(),hiE=new Set();
+  const upstream=new Set(),downstream=new Set();
   if(selected){
     conn.add(selected);
-    for(const e of graph.edges){
-      if(e.from===selected||e.to===selected){conn.add(e.from);conn.add(e.to);hiE.add(e.from+'→'+e.to);}
+
+    // 후행(downstream): BFS forward — 선택 노드 → 끝 배치까지 전체 경로
+    const qDown=[selected];
+    while(qDown.length){
+      const cur=qDown.shift();
+      for(const e of graph.edges){
+        if(e.from===cur && !downstream.has(e.to)){
+          downstream.add(e.to);conn.add(e.to);
+          hiE.add(e.from+'→'+e.to);
+          qDown.push(e.to);
+        }
+      }
+    }
+
+    // 선행(upstream): BFS backward — 시작 배치 → 선택 노드까지 경로
+    const qUp=[selected];
+    while(qUp.length){
+      const cur=qUp.shift();
+      for(const e of graph.edges){
+        if(e.to===cur && !upstream.has(e.from)){
+          upstream.add(e.from);conn.add(e.from);
+          hiE.add(e.from+'→'+e.to);
+          qUp.push(e.from);
+        }
+      }
     }
   }
+  const fs=S.focusSet; // null=전체, Set=포커스 필터
   let eH='',nH='',lH='';
   for(const e of graph.edges){
+    if(fs && (!fs.has(e.from)||!fs.has(e.to))) continue; // 포커스 외 에지 숨김
     const sp=pos.get(e.from),tp=pos.get(e.to);
     if(!sp||!tp) continue;
     const sx=sp.x+NW,sy=sp.y+NH/2,tx=tp.x,ty=tp.y+NH/2,mx=(sx+tx)/2;
     const key=e.from+'→'+e.to,isHi=hiE.has(key),dim=selected&&!isHi;
-    eH+=`<path d="M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}" fill="none" stroke="${isHi?'#388bfd':'#444c56'}" stroke-width="${isHi?2:1.5}" opacity="${dim?.15:1}" marker-end="url(#${isHi?'arw-hi':'arw'})"/>`;
+    // 선행 에지=노랑, 후행 에지=초록, 직접 연결=파랑
+    const isUpEdge   = isHi && upstream.has(e.from)   && (upstream.has(e.to)   || e.to===selected);
+    const isDownEdge = isHi && downstream.has(e.to)   && (downstream.has(e.from)|| e.from===selected);
+    const edgeColor  = isUpEdge?'#d29922':isDownEdge?'#3fb950':'#388bfd';
+    const arwId      = isUpEdge?'arw-up':isDownEdge?'arw-down':isHi?'arw-hi':'arw';
+    eH+=`<path d="M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}" fill="none" stroke="${isHi?edgeColor:'#444c56'}" stroke-width="${isHi?2.2:1.5}" opacity="${dim?.12:1}" marker-end="url(#${arwId})"/>`;
     if(isHi){
       const lx=(sx+tx)/2,ly=(sy+ty)/2,tw=e.cond.length*5.4+14;
       lH+=`<rect x="${lx-tw/2}" y="${ly-15}" width="${tw}" height="14" rx="3" fill="#0f1117" fill-opacity=".92"/>
-           <text x="${lx}" y="${ly-5}" text-anchor="middle" font-size="9.5" fill="#8b949e" font-family="monospace">${esc(e.cond)}</text>`;
+           <text x="${lx}" y="${ly-5}" text-anchor="middle" font-size="9.5" fill="${edgeColor}" font-family="monospace">${esc(e.cond)}</text>`;
     }
   }
   for(const job of graph.jobs){
+    if(fs && !fs.has(job.name)) continue; // 포커스 외 노드 숨김
     const p=pos.get(job.name);if(!p) continue;
     const isRoot=!graph.edges.some(e=>e.to===job.name);
     const isLeaf=!graph.edges.some(e=>e.from===job.name);
     const isSel=job.name===selected,isConn=conn.has(job.name),dim=selected&&!isConn;
-    const fill=isSel?'#388bfd':isRoot?'#163020':isLeaf?'#1a2640':'#1c2330';
-    const stroke=isSel?'#388bfd':(isConn&&selected)?'#388bfd':isRoot?'#2ea043':isLeaf?'#388bfd':'#30363d';
+    const isUp=upstream.has(job.name),isDown=downstream.has(job.name);
+    // fill: 선택=파랑, 선행=노랑계열, 후행=초록계열, 기본=원래색
+    const fill = isSel   ? '#1a3a6b'
+               : isUp    ? '#2a2000'
+               : isDown  ? '#0d2a18'
+               : isRoot  ? '#163020'
+               : isLeaf  ? '#1a2640'
+               : '#1c2330';
+    const stroke = isSel   ? '#388bfd'
+                 : isUp    ? '#d29922'
+                 : isDown  ? '#3fb950'
+                 : (isConn&&selected) ? '#388bfd'
+                 : isRoot  ? '#2ea043'
+                 : isLeaf  ? '#388bfd'
+                 : '#30363d';
     const label=job.name.length>25?job.name.slice(0,24)+'…':job.name;
     // 설명 > 앱/서브 순으로 보조 텍스트 결정
     const rawMeta = job.desc || [job.app,job.sub].filter(Boolean).join(' · ');
@@ -555,10 +651,12 @@ function renderSVG(){
     if(job.timeFrom){badges+=`<text x="${infoLeft}" y="${infoY}" font-size="9" fill="${isSel?'#ffffffaa':'#d2992288'}" style="pointer-events:none">${esc(job.timeFrom)}</text>`;infoLeft+=36;}
     if(job.inConds.length){badges+=`<text x="${p.x+NW-52}" y="${infoY}" font-size="9" fill="${isSel?'#ffffffbb':'#388bfdaa'}" font-weight="600" style="pointer-events:none">IN ${job.inConds.length}</text>`;}
     if(job.outConds.length){badges+=`<text x="${p.x+NW-26}" y="${infoY}" font-size="9" fill="${isSel?'#ffffffbb':'#3fb950aa'}" font-weight="600" style="pointer-events:none">OUT ${job.outConds.length}</text>`;}
-    nH+=`<g class="jn" data-job="${esc(job.name)}" style="cursor:pointer" opacity="${dim?.22:1}">
-  <rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="7" fill="${fill}" stroke="${stroke}" stroke-width="${(isSel||(isConn&&selected))?2:1.5}"/>
-  <text x="${p.x+NW/2}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="${isSel?700:600}" fill="${isSel?'#fff':'#e6edf3'}" font-family="monospace" style="pointer-events:none">${esc(label)}</text>
-  ${metaS?`<text x="${p.x+NW/2}" y="${metaY}" text-anchor="middle" font-size="9" fill="${isSel?'#ffffffaa':'#8b949e'}" style="pointer-events:none">${esc(metaS)}</text>`:''}
+    const nameColor = isSel?'#fff':isUp?'#f0c030':isDown?'#56d364':'#e6edf3';
+    const metaColor = isSel?'#ffffffaa':isUp?'#d29922aa':isDown?'#3fb950aa':'#8b949e';
+    nH+=`<g class="jn" data-job="${esc(job.name)}" style="cursor:pointer" opacity="${dim?.18:1}">
+  <rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="7" fill="${fill}" stroke="${stroke}" stroke-width="${(isSel||isUp||isDown)?2:1.5}"/>
+  <text x="${p.x+NW/2}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="${(isSel||isUp||isDown)?700:600}" fill="${nameColor}" font-family="monospace" style="pointer-events:none">${esc(label)}</text>
+  ${metaS?`<text x="${p.x+NW/2}" y="${metaY}" text-anchor="middle" font-size="9" fill="${metaColor}" style="pointer-events:none">${esc(metaS)}</text>`:''}
   ${badges}
 </g>`;
   }
@@ -569,12 +667,44 @@ function renderSVG(){
 function fitView(){
   if(!S.pos||!S.pos.size) return;
   let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
-  for(const p of S.pos.values()){x0=Math.min(x0,p.x);y0=Math.min(y0,p.y);x1=Math.max(x1,p.x+NW);y1=Math.max(y1,p.y+NH);}
+  for(const [name,p] of S.pos){
+    if(S.focusSet && !S.focusSet.has(name)) continue; // 포커스 시 해당 노드만 피팅
+    x0=Math.min(x0,p.x);y0=Math.min(y0,p.y);x1=Math.max(x1,p.x+NW);y1=Math.max(y1,p.y+NH);
+  }
+  if(x0===Infinity) return;
   const r=svg.getBoundingClientRect();
   if(!r.width||!r.height) return;
   const pad=40,sc=Math.min((r.width-pad*2)/(x1-x0),(r.height-pad*2)/(y1-y0),1.6);
   S.vt.s=sc;S.vt.x=(r.width-(x1-x0)*sc)/2-x0*sc;S.vt.y=(r.height-(y1-y0)*sc)/2-y0*sc;
   applyTransform();
+}
+
+// ── 포커스 모드 ──────────────────────────────────────────────────────────────
+function buildReachableSet(name){
+  const g=S.graph; if(!g) return new Set();
+  const set=new Set([name]);
+  // 후행(downstream) BFS
+  const qD=[name];
+  while(qD.length){ const c=qD.shift(); for(const e of g.edges) if(e.from===c&&!set.has(e.to)){set.add(e.to);qD.push(e.to);} }
+  // 선행(upstream) BFS
+  const qU=[name];
+  while(qU.length){ const c=qU.shift(); for(const e of g.edges) if(e.to===c&&!set.has(e.from)){set.add(e.from);qU.push(e.from);} }
+  return set;
+}
+
+function setFocus(name){
+  if(!name){ clearFocus(); return; }
+  const set=buildReachableSet(name);
+  S.focusSet=set; S.focusName=name;
+  renderSVG(); setTimeout(fitView,50);
+  // 트리 하이라이트 갱신
+  renderFocusTree(ftreeQuery);
+}
+
+function clearFocus(){
+  S.focusSet=null; S.focusName=null;
+  renderSVG(); setTimeout(fitView,50);
+  renderFocusTree(ftreeQuery);
 }
 
 // 특정 배치 노드를 화면 중앙으로 이동
@@ -603,6 +733,146 @@ function updateStats(){
 function jobType(name){
   const g=S.graph;if(!g) return 'm';
   return !g.edges.some(e=>e.to===name)?'r':!g.edges.some(e=>e.from===name)?'l':'m';
+}
+
+// ── 포커스 트리 렌더 ─────────────────────────────────────────────────────────
+let ftreeQuery = '';
+
+function updateBatchQuickSel(){ renderFocusTree(''); }
+
+function renderFocusTree(q){
+  const g=S.graph;
+  const panel=$('focus-tree-panel');
+  if(!g){panel.style.display='none';return;}
+  panel.style.display='flex';
+  ftreeQuery=q.toLowerCase();
+
+  // APPLICATION → SUB_APPLICATION → jobs 트리 구성
+  const tree=new Map(); // app → Map(sub → jobs[])
+  for(const j of g.jobs){
+    const app=j.app||'(미분류)';
+    const sub=j.sub||'(미분류)';
+    if(!tree.has(app)) tree.set(app,new Map());
+    const subMap=tree.get(app);
+    if(!subMap.has(sub)) subMap.set(sub,[]);
+    subMap.get(sub).push(j);
+  }
+
+  // 검색 필터 적용
+  const matchJob=j=>{
+    if(!ftreeQuery) return true;
+    return j.name.toLowerCase().includes(ftreeQuery)||
+           (j.desc||'').toLowerCase().includes(ftreeQuery)||
+           (j.nodeId||'').toLowerCase().includes(ftreeQuery);
+  };
+
+  const jobDotColor=name=>{
+    const g2=S.graph;
+    const isRoot=!g2.edges.some(e=>e.to===name);
+    const isLeaf=!g2.edges.some(e=>e.from===name);
+    return isRoot?'#3fb950':isLeaf?'#388bfd':'#d29922';
+  };
+
+  let html='';
+  let totalVisible=0;
+
+  for(const [app,subMap] of [...tree].sort((a,b)=>a[0].localeCompare(b[0]))){
+    let appHtml='';
+    let appCount=0;
+
+    for(const [sub,jobs] of [...subMap].sort((a,b)=>a[0].localeCompare(b[0]))){
+      const visible=jobs.filter(matchJob);
+      if(!visible.length) continue;
+      appCount+=visible.length; totalVisible+=visible.length;
+
+      const subId=`ftgsub-${btoa(unescape(encodeURIComponent(app+sub))).slice(0,12)}`;
+      const isSubOpen=!ftreeQuery?true:true; // 검색 중엔 항상 펼침
+
+      const jobsHtml=visible.map(j=>{
+        const isFoc=S.focusName===j.name;
+        const dot=jobDotColor(j.name);
+        const descShort=j.desc?(j.desc.length>22?j.desc.slice(0,21)+'…':j.desc):'';
+        return `<div class="ftg-job${isFoc?' focused':''}" data-focus="${esc(j.name)}" title="${esc(j.name)}${j.desc?' - '+j.desc:''}">
+  <span class="ftg-job-dot" style="background:${dot}"></span>
+  <span class="ftg-job-name">${highlightMatch(j.name,ftreeQuery)}</span>
+  ${descShort?`<span class="ftg-job-desc">${highlightMatch(descShort,ftreeQuery)}</span>`:''}
+</div>`;
+      }).join('');
+
+      appHtml+=`<div class="ftg-sub">
+  <div class="ftg-sub-hdr" data-ftgsub="${subId}">
+    <span class="ftg-sub-arrow open">▶</span>
+    <span>📁 ${esc(sub)}</span>
+    <span style="margin-left:auto;font-size:10px;color:var(--text3)">${visible.length}</span>
+  </div>
+  <div id="${subId}">${jobsHtml}</div>
+</div>`;
+    }
+
+    if(!appCount) continue;
+
+    const appId=`ftgapp-${btoa(unescape(encodeURIComponent(app))).slice(0,12)}`;
+    const isAppOpen=tree.size===1||!!ftreeQuery||appCount<=20;
+
+    html+=`<div class="ftg-app">
+  <div class="ftg-app-hdr" data-ftgapp="${appId}">
+    <span class="ftg-app-arrow${isAppOpen?' open':''}">▶</span>
+    <span>📦 ${esc(app)}</span>
+    <span style="margin-left:auto;font-size:10px;color:var(--text3)">${appCount}개</span>
+  </div>
+  <div id="${appId}"${isAppOpen?'':' style="display:none"'}>${appHtml}</div>
+</div>`;
+  }
+
+  if(!totalVisible && ftreeQuery){
+    html=`<div class="ftg-no-result">검색 결과 없음: "${esc(ftreeQuery)}"</div>`;
+  }
+
+  $('ftree-body').innerHTML=html;
+
+  // 앱 그룹 토글
+  $('ftree-body').querySelectorAll('.ftg-app-hdr').forEach(hdr=>{
+    hdr.addEventListener('click',()=>{
+      const id=hdr.dataset.ftgapp;
+      const body=$(id);
+      const arrow=hdr.querySelector('.ftg-app-arrow');
+      const open=body.style.display==='none';
+      body.style.display=open?'':'none';
+      arrow.classList.toggle('open',open);
+    });
+  });
+
+  // 서브 그룹 토글
+  $('ftree-body').querySelectorAll('.ftg-sub-hdr').forEach(hdr=>{
+    hdr.addEventListener('click',()=>{
+      const id=hdr.dataset.ftgsub;
+      const body=$(id);
+      const arrow=hdr.querySelector('.ftg-sub-arrow');
+      const open=body.style.display==='none'||body.style.display==='';
+      // toggle visibility
+      const isHidden=body.style.display==='none';
+      body.style.display=isHidden?'':'none';
+      arrow.classList.toggle('open',isHidden);
+    });
+  });
+
+  // 배치 클릭 → 포커스
+  $('ftree-body').querySelectorAll('.ftg-job').forEach(item=>{
+    item.addEventListener('click',()=>{
+      const name=item.dataset.focus;
+      if(name===S.focusName){ clearFocus(); }
+      else{ setFocus(name); }
+    });
+  });
+}
+
+function highlightMatch(text, q){
+  if(!q) return esc(text);
+  const idx=text.toLowerCase().indexOf(q);
+  if(idx<0) return esc(text);
+  return esc(text.slice(0,idx))
+    +`<mark style="background:#d2992244;color:inherit;border-radius:2px">${esc(text.slice(idx,idx+q.length))}</mark>`
+    +esc(text.slice(idx+q.length));
 }
 
 function renderJobList(){
@@ -671,10 +941,15 @@ ${scriptRows.map(r=>`<tr><td style="color:var(--text3);width:90px">${r[0]}</td><
   const cmdSection=job.cmdLine?`<div class="section-title">실행 명령</div>
 <div style="font-family:var(--mono);font-size:10.5px;color:var(--text2);background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:8px;word-break:break-all;line-height:1.7;margin-bottom:10px">${esc(job.cmdLine)}</div>`:'';
 
+  const isFocused=S.focusName===job.name;
   $('detail-body').innerHTML=`<div class="detail">
 <div class="detail-head">
   <div class="detail-name">${esc(job.name)}</div>
   <button class="btn btn-g" onclick="closeDetail()" style="font-size:11.5px;height:26px;padding:0 8px">닫기</button>
+</div>
+<div style="display:flex;gap:6px;margin-bottom:10px">
+  <button onclick="setFocus('${esc(job.name)}')" class="btn btn-s" style="flex:1;font-size:11.5px;height:28px">${isFocused?'🔍 포커스 중':'🔍 이 경로만 보기'}</button>
+  ${isFocused?`<button onclick="clearFocus()" class="btn btn-g" style="font-size:11.5px;height:28px;padding:0 9px">전체 보기</button>`:''}
 </div>
 ${job.desc?`<div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;padding:7px 9px;background:var(--surface2);border-radius:5px;border-left:3px solid var(--accent)">${esc(job.desc)}</div>`:''}
 ${pills?`<div class="pills">${pills}</div>`:''}
@@ -725,12 +1000,13 @@ function generate(xmlStr){
     $('btn-clear').style.display='';
     $('tab-jobs').style.display='';$('tab-ai').style.display='';$('tab-search').style.display='';
     renderSVG();setTimeout(fitView,50);
-    updateStats();renderJobList();
+    updateStats();renderJobList();updateBatchQuickSel();
     // Reset AI/embed/filter/search state on new graph
     EMB.built=false;EMB.building=false;EMB.data.clear();EMB.progress=0;
     AI.text='';AI.error='';AI.running=false;AI.history=[];
     SRCH.results=[];SRCH.last='';
     FILTER.app.clear();FILTER.sub.clear();FILTER.node.clear();
+    S.focusSet=null;S.focusName=null;
     setTab('jobs');
   }catch(e){
     $('err-msg').textContent='⚠ '+e.message;$('err-msg').style.display='block';
@@ -793,6 +1069,20 @@ $('btn-back').onclick=()=>setTab('input');
 $('btn-fit').onclick=fitView;
 $('btn-zi').onclick=()=>{S.vt.s=Math.min(3,S.vt.s*1.2);applyTransform();};
 $('btn-zo').onclick=()=>{S.vt.s=Math.max(.1,S.vt.s*.83);applyTransform();};
+$('btn-all-view').onclick=clearFocus;
+
+// 트리 검색 입력
+$('ftree-search').addEventListener('input',e=>{
+  const q=e.target.value;
+  $('ftree-search-clear').style.display=q?'':'none';
+  renderFocusTree(q);
+});
+$('ftree-search-clear').addEventListener('click',()=>{
+  $('ftree-search').value='';
+  $('ftree-search-clear').style.display='none';
+  renderFocusTree('');
+  $('ftree-search').focus();
+});
 $('tabs').addEventListener('click',e=>{const t=e.target.dataset?.tab;if(t) setTab(t);});
 $('job-list').addEventListener('click',e=>{
   const item=e.target.closest('.job-item');if(!item) return;
@@ -831,11 +1121,20 @@ function showMoveConfirm(name){
   overlay.querySelector('#mc-cancel').onclick=close;
   overlay.querySelector('#mc-ok').onclick=()=>{
     close();
-    // 배치 선택 후 다이어그램 하이라이트 + 중앙 이동
     S.selected=name;
+
+    // 포커스 모드가 켜져 있으면 해당 배치가 보이도록 포커스를 갱신
+    if(S.focusSet && !S.focusSet.has(name)){
+      // 클릭한 배치가 현재 포커스 범위 밖 → 해당 배치로 포커스 전환
+      const set=buildReachableSet(name);
+      S.focusSet=set; S.focusName=name;
+      renderFocusTree(ftreeQuery);
+    }
+
     renderSVG();
     renderJobList();
-    setTimeout(()=>{centerOnJob(name);},60);
+    // SVG 레이아웃 완료 후 이동 (포커스 재계산 포함)
+    setTimeout(()=>{centerOnJob(name);},120);
     // 상세정보 탭 열기
     $('tab-detail').style.display='';
     renderDetail(name);
