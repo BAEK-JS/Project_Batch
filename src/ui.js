@@ -161,16 +161,22 @@ export function jobGroupKey(job) {
   return job?.sub || job?.app || job?.folder || '';
 }
 
-function updateGroupFilterBar() {
+function updateGroupFilterBar(inGroupCount) {
   const bar = $('group-filter-bar');
   if (!bar) return;
   if (S.groupFilter) {
     bar.classList.add('on');
     bar.style.display = 'flex';
     $('group-filter-name').textContent = S.groupFilter;
-    const cnt = S.focusSet ? S.focusSet.size : 0;
+    const total = S.focusSet ? S.focusSet.size : 0;
     const countEl = $('group-filter-count');
-    if (countEl) countEl.textContent = cnt ? `${cnt}개` : '';
+    if (countEl) {
+      if (inGroupCount && total > inGroupCount) {
+        countEl.textContent = `그룹 ${inGroupCount} · 표시 ${total}개`;
+      } else {
+        countEl.textContent = total ? `${total}개` : '';
+      }
+    }
   } else {
     bar.classList.remove('on');
     bar.style.display = 'none';
@@ -205,8 +211,8 @@ function renderGroupSidePanel(baseNames) {
 
   const items = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   list.innerHTML = items.map(([name, cnt]) => {
-    const on = S.groupFilter === name ? ' on' : '';
-    return `<button type="button" class="group-side-item${on}" data-group-filter="${esc(name)}" title="${esc(name)}">
+    const cls = S.groupFilter === name ? ' on' : S.groupPreview === name ? ' preview' : '';
+    return `<button type="button" class="group-side-item${cls}" data-group-preview="${esc(name)}" title="${esc(name)}">
   <span class="group-side-item-name">${esc(name)}</span>
   <span class="group-side-item-cnt">${cnt}</span>
 </button>`;
@@ -215,11 +221,30 @@ function renderGroupSidePanel(baseNames) {
   const ttl = $('group-side-ttl');
   const hint = $('group-side-hint');
   const allBtn = $('btn-group-side-all');
-  if (ttl) ttl.textContent = S.focusName ? '선후행 그룹' : '그룹 내역';
-  if (hint) hint.textContent = '그룹 클릭 시 해당 그룹만 표시';
-  if (allBtn) allBtn.textContent = S.focusName ? '전체 선후행' : '전체 보기';
+  const goBtn = $('btn-group-side-go');
+  const scoped = !!S.groupScope?.size;
+  if (ttl) {
+    ttl.textContent = scoped
+      ? '현재 화면 그룹'
+      : (S.focusName ? '선후행 그룹' : '그룹 내역');
+  }
+  if (hint) {
+    hint.textContent = S.groupPreview
+      ? `"${S.groupPreview}" 강조 중 · 이동 시 이 범위 안에서만 전환`
+      : (scoped
+        ? '이동한 화면 기준 · 여기 있는 그룹만 표시'
+        : '그룹 클릭 → 색 강조 · 이동으로 전환');
+  }
+  if (allBtn) {
+    allBtn.textContent = scoped
+      ? '처음 범위로'
+      : (S.focusName ? '전체 선후행' : '전체 보기');
+  }
+  if (goBtn) {
+    goBtn.disabled = !S.groupPreview;
+    goBtn.textContent = S.groupPreview ? `이동 · ${S.groupPreview}` : '이동';
+  }
 
-  // 우측 고정 · 그룹보기 버튼으로만 열림
   panel.classList.add('right');
   panel.classList.toggle('on', !!S.groupPanelOpen);
   panel.style.display = S.groupPanelOpen ? 'flex' : 'none';
@@ -237,34 +262,103 @@ export function toggleGroupPanel(force) {
   updateGroupPanelToggleBtn();
 }
 
-/** 현재 포커스(+그룹 필터) 기준으로 레이아웃/렌더 — 그룹 선택 시 해당 잡만 남기고 재배치 */
+/** 최초 기준(선후행 또는 전체 XML) */
+function getRootBaseNameSet() {
+  if (!S.graph) return new Set();
+  if (S.focusName) return buildReachableSet(S.focusName);
+  return new Set(S.graph.jobs.map(j => j.name));
+}
+
+/** 그룹 탐색에 쓰는 현재 범위(이동 후면 그 화면) */
+function getGroupScopeNames() {
+  if (S.groupScope?.size) return S.groupScope;
+  return getRootBaseNameSet();
+}
+
+/** 그룹 필터용 잡 집합: 해당 그룹 + (기준 집합 안) 직접 선·후행 */
+function buildGroupViewNames(baseNames, group) {
+  const byName = new Map(S.graph.jobs.map(j => [j.name, j]));
+  const inGroup = new Set(
+    [...baseNames].filter(n => jobGroupKey(byName.get(n)) === group)
+  );
+  const related = new Set(inGroup);
+  for (const e of S.graph.edges) {
+    if (!baseNames.has(e.from) || !baseNames.has(e.to)) continue;
+    if (inGroup.has(e.from)) related.add(e.to);
+    if (inGroup.has(e.to)) related.add(e.from);
+  }
+  return { inGroup, names: related };
+}
+
+/** 그룹 클릭: 현재 범위 화면에서 색만 강조 */
+export function setGroupPreview(group) {
+  if (!group) {
+    S.groupPreview = null;
+  } else if (S.groupPreview === group) {
+    S.groupPreview = null;
+  } else {
+    S.groupPreview = group;
+    S.groupPanelOpen = true;
+  }
+
+  // 다른 그룹 미리보기: 처음 전체로 풀지 않고, 현재 groupScope(이동한 화면) 유지
+  if (S.groupPreview && S.groupFilter && S.groupFilter !== S.groupPreview) {
+    S.groupFilter = null;
+    applyDiagramView();
+    return;
+  }
+
+  const panelBase = getGroupScopeNames();
+  updateGroupFilterBar();
+  renderGroupSidePanel(panelBase);
+  renderSVG();
+}
+
+/** 이동: 현재 범위 안에서 그룹으로 좁히고, 그 결과가 다음 그룹보기의 새 기준 */
+export function goToGroupPreview() {
+  if (!S.groupPreview) return;
+  const group = S.groupPreview;
+  const scope = getGroupScopeNames();
+  const built = buildGroupViewNames(scope, group);
+
+  S.groupPreview = null;
+  S.groupFilter = group;
+  S.groupScope = new Set(built.names); // 이동한 화면 = 이후 그룹보기 기준
+  S.groupPanelOpen = false;
+  if (!S.focusName) S.selected = null;
+  applyDiagramView();
+  updateGroupPanelToggleBtn();
+}
+
+/** 현재 포커스(+그룹 범위) 기준으로 레이아웃/렌더 */
 export function applyDiagramView() {
   if (!S.graph) return;
 
-  let baseNames;
-  if (S.focusName) baseNames = buildReachableSet(S.focusName);
-  else baseNames = new Set(S.graph.jobs.map(j => j.name));
+  const rootBase = getRootBaseNameSet();
+  // 그룹 이동 후에는 groupScope가 화면·그룹목록 기준
+  const names = S.groupScope?.size ? S.groupScope : rootBase;
 
-  let names = baseNames;
+  let inGroupCount = 0;
   if (S.groupFilter) {
     const byName = new Map(S.graph.jobs.map(j => [j.name, j]));
-    // 그룹 잡만 (이웃 확장 없음) — 다른 배치는 제거하고 이 부분만 새로 그림
-    names = new Set(
-      [...baseNames].filter(n => jobGroupKey(byName.get(n)) === S.groupFilter)
-    );
+    inGroupCount = [...names].filter(n => jobGroupKey(byName.get(n)) === S.groupFilter).length;
   }
 
-  S.focusSet = (S.focusName || S.groupFilter) ? names : null;
+  S.focusSet = (S.focusName || S.groupScope) ? names : null;
   const subGraph = {
     jobs:  S.graph.jobs.filter(j => names.has(j.name)),
     edges: S.graph.edges.filter(e => names.has(e.from) && names.has(e.to)),
   };
-  S.pos = computeLayout(subGraph, { compact: !!S.groupFilter });
+
+  S.viewGraph = (S.focusName || S.groupScope) ? subGraph : null;
+  S.pos = computeLayout(subGraph, { compact: !!S.groupScope });
+
   $('empty').style.display = 'none';
   svg.style.display = 'block';
   $('ctrl').classList.add('on'); $('legend').classList.add('on');
-  updateGroupFilterBar();
-  renderGroupSidePanel(baseNames);
+  updateGroupFilterBar(inGroupCount);
+  // 그룹 목록은 항상 현재 화면에 있는 그룹만
+  renderGroupSidePanel(names);
   renderSVG();
   renderJobList();
   renderFocusTree(ftreeQuery);
@@ -274,28 +368,23 @@ export function applyDiagramView() {
 
 export function setGroupFilter(group) {
   if (!group) {
+    // 처음 범위(전체/선후행)로 복귀
     S.groupFilter = null;
-  } else if (S.groupFilter === group) {
-    S.groupFilter = null;
-  } else {
-    S.groupFilter = group;
-    S.groupPanelOpen = true; // 그룹 선택 시 패널 유지(우측)
-  }
-  if (!S.graph) { updateGroupFilterBar(); return; }
-  if (!S.focusName && !S.groupFilter) {
-    showAllDiagram();
-    return;
-  }
-  if (!S.focusName && S.groupFilter) {
-    S.selected = null;
+    S.groupPreview = null;
+    S.groupScope = null;
+    if (!S.graph) { updateGroupFilterBar(); return; }
+    if (!S.focusName) {
+      showAllDiagram();
+      return;
+    }
     applyDiagramView();
     return;
   }
-  applyDiagramView();
+  setGroupPreview(group);
 }
 
 export function loadGraphAsJobList(graph, label = '') {
-  S.graph = graph; S.pos = null; S.selected = null; S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPanelOpen = false;
+  S.graph = graph; S.pos = null; S.selected = null; S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPreview = null; S.groupPanelOpen = false; S.groupScope = null; S.viewGraph = null;
   $('err-msg').style.display = 'none';
   svg.style.display = 'none';
   dagRoot.innerHTML = '';
@@ -333,6 +422,8 @@ export function showJobFocusDiagram(jobName) {
   S.selected = jobName;
   S.focusName = jobName;
   S.groupFilter = null;
+  S.groupPreview = null;
+  S.groupScope = null;
   $('tab-detail').style.display = '';
   applyDiagramView();
   renderDetail(jobName);
@@ -344,6 +435,10 @@ export function showAllDiagram() {
   S.selected = null;
   S.focusName = null;
   S.groupFilter = null;
+  S.groupPreview = null;
+  S.groupScope = null;
+  S.viewGraph = null;
+  S.focusSet = null;
   applyDiagramView();
 }
 
@@ -351,7 +446,7 @@ export function generate(xmlStr) {
   try {
     const graph = parseXML(xmlStr);
     S.graph = graph; S.selected = null;
-    S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPanelOpen = false;
+    S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPreview = null; S.groupPanelOpen = false; S.groupScope = null; S.viewGraph = null;
     $('err-msg').style.display = 'none';
     $('btn-clear').style.display = '';
     $('tab-jobs').style.display = ''; $('tab-ai').style.display = ''; $('tab-search').style.display = '';
@@ -368,7 +463,7 @@ export function generate(xmlStr) {
 }
 
 export function clearAll() {
-  S.graph = null; S.pos = null; S.selected = null; S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPanelOpen = false;
+  S.graph = null; S.pos = null; S.selected = null; S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPreview = null; S.groupPanelOpen = false; S.groupScope = null; S.viewGraph = null;
   updateGroupFilterBar();
   const panel = $('group-side-panel');
   if (panel) { panel.classList.remove('on'); panel.style.display = 'none'; }

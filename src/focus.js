@@ -93,7 +93,7 @@ export function renderFocusTree(q) {
       appHtml += `<div class="ftg-sub">
   <div class="ftg-sub-hdr" data-ftgsub="${subId}">
     <span class="ftg-sub-arrow open">▶</span>
-    <span class="ftg-sub-name${S.groupFilter === sub ? ' on' : ''}" data-group-filter="${esc(sub)}" title="클릭: 이 그룹만 보기">📁 ${esc(sub)}</span>
+    <span class="ftg-sub-name${S.groupFilter === sub ? ' on' : S.groupPreview === sub ? ' on' : ''}" data-group-filter="${esc(sub)}" title="클릭: 그룹 색 강조">📁 ${esc(sub)}</span>
     <span style="margin-left:auto;font-size:10px;color:var(--text3)">${visible.length}</span>
   </div>
   <div id="${subId}">${jobsHtml}</div>

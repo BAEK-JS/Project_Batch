@@ -12,8 +12,11 @@ export const S = {
   panned: false,
   focusSet: null,   // null=전체, Set=포커스 배치 집합
   focusName: null,  // 포커스 기준 배치명
-  groupFilter: null, // null=전체, string=SUB_APPLICATION(또는 app/folder) 그룹 필터
+  groupFilter: null, // null=전체, string=실제 이동된 그룹 필터
+  groupPreview: null, // 클릭만 한 미리보기 그룹(색 강조, 아직 이동 전)
   groupPanelOpen: false, // 우측 그룹내역 패널 열림 여부
+  groupScope: null, // Set|null 그룹 탐색 범위(이동 후 현재 화면이 새 기준)
+  viewGraph: null, // 렌더용 부분 그래프(그룹/포커스 시). null이면 S.graph 전체
 };
 
 // ── API 설정 (localStorage 연동) ─────────────────────────────────────────────

@@ -7,7 +7,7 @@ import { clearFocus, renderFocusTree, setFocus, bindFocusHandlers } from './focu
 import {
   setTab, closeDetail,
   generate, clearAll, openSettings, closeSettings,
-  showJobFocusDiagram, showAllDiagram, loadXmlAsJobList, setGroupFilter, toggleGroupPanel,
+  showJobFocusDiagram, showAllDiagram, loadXmlAsJobList, setGroupFilter, toggleGroupPanel, goToGroupPreview,
 } from './ui.js';
 import { exportExcel } from './excel.js';
 import { doSearch } from './search.js';
@@ -107,11 +107,12 @@ $('btn-zo').onclick      = () => { S.vt.s = Math.max(.1, S.vt.s * .83); applyTra
 $('btn-clear-group').onclick = () => setGroupFilter(null);
 $('btn-group-panel').onclick = () => toggleGroupPanel();
 $('btn-close-group-panel').onclick = () => toggleGroupPanel(false);
+$('btn-group-side-go').onclick = () => goToGroupPreview();
 $('btn-group-side-all').onclick = () => setGroupFilter(null);
 $('group-side-list').addEventListener('click', e => {
-  const btn = e.target.closest?.('[data-group-filter]');
+  const btn = e.target.closest?.('[data-group-preview]');
   if (!btn) return;
-  const group = btn.getAttribute('data-group-filter');
+  const group = btn.getAttribute('data-group-preview');
   if (group) setGroupFilter(group);
 });
 $('btn-all-view').onclick = clearFocus;

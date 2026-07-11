@@ -2,7 +2,9 @@ import { S, NW, NH } from './state.js';
 import { svg, dagRoot, svgDefs, esc, applyTransform } from './utils.js';
 
 export function renderSVG() {
-  const { graph, pos, selected } = S;
+  // 그룹/포커스 이동 후에는 viewGraph만 그려 전체보기가 다시 나오지 않게 함
+  const graph = S.viewGraph || S.graph;
+  const { pos, selected } = S;
   if (!graph) return;
 
   svgDefs.innerHTML = `
@@ -14,7 +16,8 @@ export function renderSVG() {
   const conn = new Set(), hiE = new Set();
   const upstream = new Set(), downstream = new Set();
   // 그룹 필터 중에는 전체 경로 하이라이트/딤을 끄고 해당 그룹만 또렷이 표시
-  const pathHi = selected && !S.groupFilter;
+  const pathHi = selected && !S.groupFilter && !S.groupPreview;
+  const previewGroup = S.groupPreview;
 
   if (pathHi) {
     conn.add(selected);
@@ -42,7 +45,9 @@ export function renderSVG() {
     }
   }
 
-  const fs = S.focusSet;
+  // 그룹 필터 중에는 viewGraph만 쓰므로 focusSet 재필터는 생략 가능하지만 유지
+  const fs = S.viewGraph ? null : S.focusSet;
+  const jobByName = new Map(graph.jobs.map(j => [j.name, j]));
   let eH = '', nH = '', lH = '';
 
   for (const e of graph.edges) {
@@ -50,13 +55,19 @@ export function renderSVG() {
     const sp = pos.get(e.from), tp = pos.get(e.to);
     if (!sp || !tp) continue;
     const sx = sp.x + NW, sy = sp.y + NH / 2, tx = tp.x, ty = tp.y + NH / 2, mx = (sx + tx) / 2;
-    const key = e.from + '→' + e.to, isHi = hiE.has(key), dim = pathHi && !isHi;
+    const key = e.from + '→' + e.to, isHi = hiE.has(key);
+    const fromJob = jobByName.get(e.from);
+    const toJob = jobByName.get(e.to);
+    const fromPrev = previewGroup && (fromJob?.sub || fromJob?.app || fromJob?.folder) === previewGroup;
+    const toPrev = previewGroup && (toJob?.sub || toJob?.app || toJob?.folder) === previewGroup;
+    const isPrevEdge = fromPrev && toPrev;
+    const dim = previewGroup ? !isPrevEdge : (pathHi && !isHi);
     const isUpEdge   = isHi && upstream.has(e.from) && (upstream.has(e.to) || e.to === selected);
     const isDownEdge = isHi && downstream.has(e.to) && (downstream.has(e.from) || e.from === selected);
-    const edgeColor  = isUpEdge ? '#d29922' : isDownEdge ? '#3fb950' : '#388bfd';
-    const arwId      = isUpEdge ? 'arw-up' : isDownEdge ? 'arw-down' : isHi ? 'arw-hi' : 'arw';
-    eH += `<path d="M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}" fill="none" stroke="${isHi ? edgeColor : '#444c56'}" stroke-width="${isHi ? 2.2 : 1.5}" opacity="${dim ? .12 : 1}" marker-end="url(#${arwId})"/>`;
-    if (isHi) {
+    const edgeColor  = isPrevEdge ? '#d29922' : isUpEdge ? '#d29922' : isDownEdge ? '#3fb950' : '#388bfd';
+    const arwId      = isPrevEdge ? 'arw-up' : isUpEdge ? 'arw-up' : isDownEdge ? 'arw-down' : isHi ? 'arw-hi' : 'arw';
+    eH += `<path d="M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}" fill="none" stroke="${(isHi || isPrevEdge) ? edgeColor : '#444c56'}" stroke-width="${(isHi || isPrevEdge) ? 2.2 : 1.5}" opacity="${dim ? .1 : 1}" marker-end="url(#${arwId})"/>`;
+    if (isHi && !previewGroup) {
       const lx = (sx + tx) / 2, ly = (sy + ty) / 2, tw = e.cond.length * 5.4 + 14;
       lH += `<rect x="${lx - tw / 2}" y="${ly - 15}" width="${tw}" height="14" rx="3" fill="#0f1117" fill-opacity=".92"/>
              <text x="${lx}" y="${ly - 5}" text-anchor="middle" font-size="9.5" fill="${edgeColor}" font-family="monospace">${esc(e.cond)}</text>`;
@@ -68,19 +79,21 @@ export function renderSVG() {
     const p = pos.get(job.name); if (!p) continue;
     const isRoot = !graph.edges.some(e => e.to   === job.name);
     const isLeaf = !graph.edges.some(e => e.from === job.name);
-    const isSel = job.name === selected, isConn = conn.has(job.name), dim = pathHi && !isConn;
+    const isSel = job.name === selected, isConn = conn.has(job.name);
     const isUp = upstream.has(job.name), isDown = downstream.has(job.name);
+    const groupRaw = job.sub || job.app || job.folder || '';
+    const isPrev = previewGroup && groupRaw === previewGroup;
+    const dim = previewGroup ? !isPrev : (pathHi && !isConn);
 
-    const fill   = isSel ? '#1a3a6b' : isUp ? '#2a2000' : isDown ? '#0d2a18' : isRoot ? '#163020' : isLeaf ? '#1a2640' : '#1c2330';
-    const stroke = isSel ? '#388bfd' : isUp ? '#d29922' : isDown ? '#3fb950'
+    const fill   = isPrev ? '#3d2e00' : isSel ? '#1a3a6b' : isUp ? '#2a2000' : isDown ? '#0d2a18' : isRoot ? '#163020' : isLeaf ? '#1a2640' : '#1c2330';
+    const stroke = isPrev ? '#e3b341' : isSel ? '#388bfd' : isUp ? '#d29922' : isDown ? '#3fb950'
                  : (isConn && selected) ? '#388bfd' : isRoot ? '#2ea043' : isLeaf ? '#388bfd' : '#30363d';
 
     const label   = job.name.length > 25 ? job.name.slice(0, 24) + '…' : job.name;
     const rawMeta = job.desc || '';
     const metaS   = rawMeta.length > 28 ? rawMeta.slice(0, 27) + '…' : rawMeta;
-    const groupRaw = job.sub || job.app || job.folder || '';
     const groupS   = groupRaw.length > 28 ? groupRaw.slice(0, 27) + '…' : groupRaw;
-    const groupActive = S.groupFilter && groupRaw === S.groupFilter;
+    const groupActive = (S.groupFilter && groupRaw === S.groupFilter) || isPrev;
     const groupY = p.y + 14;
     const textY = p.y + (groupS ? 32 : 22);
     const metaY = p.y + (groupS ? 46 : 36);
@@ -88,23 +101,23 @@ export function renderSVG() {
 
     let badges = '', infoLeft = p.x + 8;
     if (job.nodeId) {
-      badges += `<text x="${infoLeft}" y="${infoY}" font-size="9" fill="${isSel ? '#ffffffaa' : '#388bfdaa'}" style="pointer-events:none">${esc(job.nodeId.length > 12 ? job.nodeId.slice(0, 11) + '…' : job.nodeId)}</text>`;
+      badges += `<text x="${infoLeft}" y="${infoY}" font-size="9" fill="${isSel || isPrev ? '#ffffffaa' : '#388bfdaa'}" style="pointer-events:none">${esc(job.nodeId.length > 12 ? job.nodeId.slice(0, 11) + '…' : job.nodeId)}</text>`;
       infoLeft += job.nodeId.length > 12 ? 80 : job.nodeId.length * 5.5 + 4;
     }
     if (job.timeFrom) {
-      badges += `<text x="${infoLeft}" y="${infoY}" font-size="9" fill="${isSel ? '#ffffffaa' : '#d2992288'}" style="pointer-events:none">${esc(job.timeFrom)}</text>`;
+      badges += `<text x="${infoLeft}" y="${infoY}" font-size="9" fill="${isSel || isPrev ? '#ffffffaa' : '#d2992288'}" style="pointer-events:none">${esc(job.timeFrom)}</text>`;
     }
-    if (job.inConds.length)  badges += `<text x="${p.x + NW - 52}" y="${infoY}" font-size="9" fill="${isSel ? '#ffffffbb' : '#388bfdaa'}" font-weight="600" style="pointer-events:none">IN ${job.inConds.length}</text>`;
-    if (job.outConds.length) badges += `<text x="${p.x + NW - 26}" y="${infoY}" font-size="9" fill="${isSel ? '#ffffffbb' : '#3fb950aa'}" font-weight="600" style="pointer-events:none">OUT ${job.outConds.length}</text>`;
+    if (job.inConds.length)  badges += `<text x="${p.x + NW - 52}" y="${infoY}" font-size="9" fill="${isSel || isPrev ? '#ffffffbb' : '#388bfdaa'}" font-weight="600" style="pointer-events:none">IN ${job.inConds.length}</text>`;
+    if (job.outConds.length) badges += `<text x="${p.x + NW - 26}" y="${infoY}" font-size="9" fill="${isSel || isPrev ? '#ffffffbb' : '#3fb950aa'}" font-weight="600" style="pointer-events:none">OUT ${job.outConds.length}</text>`;
 
-    const nameColor = isSel ? '#fff' : isUp ? '#f0c030' : isDown ? '#56d364' : '#e6edf3';
-    const metaColor = isSel ? '#ffffffaa' : isUp ? '#d29922aa' : isDown ? '#3fb950aa' : '#8b949e';
-    const groupColor = groupActive ? '#58a6ff' : isSel ? '#79b8ff' : isUp ? '#d29922' : isDown ? '#3fb950' : '#8b949e';
+    const nameColor = isPrev ? '#ffe8a3' : isSel ? '#fff' : isUp ? '#f0c030' : isDown ? '#56d364' : '#e6edf3';
+    const metaColor = isPrev ? '#e3b341cc' : isSel ? '#ffffffaa' : isUp ? '#d29922aa' : isDown ? '#3fb950aa' : '#8b949e';
+    const groupColor = isPrev ? '#e3b341' : groupActive ? '#58a6ff' : isSel ? '#79b8ff' : isUp ? '#d29922' : isDown ? '#3fb950' : '#8b949e';
 
-    nH += `<g class="jn" data-job="${esc(job.name)}" style="cursor:pointer" opacity="${dim ? .18 : 1}">
-  <rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="7" fill="${fill}" stroke="${stroke}" stroke-width="${(isSel || isUp || isDown) ? 2 : 1.5}"/>
-  ${groupS ? `<text class="jn-group" data-group="${esc(groupRaw)}" x="${p.x + NW / 2}" y="${groupY}" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="${groupColor}" title="그룹 필터: ${esc(groupRaw)}">${esc(groupS)}</text>` : ''}
-  <text x="${p.x + NW / 2}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="${(isSel || isUp || isDown) ? 700 : 600}" fill="${nameColor}" font-family="monospace" style="pointer-events:none">${esc(label)}</text>
+    nH += `<g class="jn" data-job="${esc(job.name)}" style="cursor:pointer" opacity="${dim ? .16 : 1}">
+  <rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="7" fill="${fill}" stroke="${stroke}" stroke-width="${(isPrev || isSel || isUp || isDown) ? 2.4 : 1.5}"/>
+  ${groupS ? `<text class="jn-group" data-group="${esc(groupRaw)}" x="${p.x + NW / 2}" y="${groupY}" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="${groupColor}" title="그룹 미리보기: ${esc(groupRaw)}">${esc(groupS)}</text>` : ''}
+  <text x="${p.x + NW / 2}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="${(isPrev || isSel || isUp || isDown) ? 700 : 600}" fill="${nameColor}" font-family="monospace" style="pointer-events:none">${esc(label)}</text>
   ${metaS ? `<text x="${p.x + NW / 2}" y="${metaY}" text-anchor="middle" font-size="9" fill="${metaColor}" style="pointer-events:none">${esc(metaS)}</text>` : ''}
   ${badges}
 </g>`;
