@@ -15,13 +15,14 @@ export function renderSVG() {
 
   const conn = new Set(), hiE = new Set();
   const upstream = new Set(), downstream = new Set();
-  // 그룹 필터 중에는 전체 경로 하이라이트/딤을 끄고 해당 그룹만 또렷이 표시
-  const pathHi = selected && !S.groupFilter && !S.groupPreview;
   const previewGroup = S.groupPreview;
+  // 배치 미리보기(클릭) 또는 선택 잡 기준으로 선후행 색 강조
+  const hiJob = S.jobPreview || (!previewGroup ? selected : null);
+  const pathHi = !!hiJob;
 
   if (pathHi) {
-    conn.add(selected);
-    const qDown = [selected];
+    conn.add(hiJob);
+    const qDown = [hiJob];
     while (qDown.length) {
       const cur = qDown.shift();
       for (const e of graph.edges) {
@@ -32,7 +33,7 @@ export function renderSVG() {
         }
       }
     }
-    const qUp = [selected];
+    const qUp = [hiJob];
     while (qUp.length) {
       const cur = qUp.shift();
       for (const e of graph.edges) {
@@ -62,8 +63,8 @@ export function renderSVG() {
     const toPrev = previewGroup && (toJob?.sub || toJob?.app || toJob?.folder) === previewGroup;
     const isPrevEdge = fromPrev && toPrev;
     const dim = previewGroup ? !isPrevEdge : (pathHi && !isHi);
-    const isUpEdge   = isHi && upstream.has(e.from) && (upstream.has(e.to) || e.to === selected);
-    const isDownEdge = isHi && downstream.has(e.to) && (downstream.has(e.from) || e.from === selected);
+    const isUpEdge   = isHi && upstream.has(e.from) && (upstream.has(e.to) || e.to === hiJob);
+    const isDownEdge = isHi && downstream.has(e.to) && (downstream.has(e.from) || e.from === hiJob);
     const edgeColor  = isPrevEdge ? '#d29922' : isUpEdge ? '#d29922' : isDownEdge ? '#3fb950' : '#388bfd';
     const arwId      = isPrevEdge ? 'arw-up' : isUpEdge ? 'arw-up' : isDownEdge ? 'arw-down' : isHi ? 'arw-hi' : 'arw';
     eH += `<path d="M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}" fill="none" stroke="${(isHi || isPrevEdge) ? edgeColor : '#444c56'}" stroke-width="${(isHi || isPrevEdge) ? 2.2 : 1.5}" opacity="${dim ? .1 : 1}" marker-end="url(#${arwId})"/>`;
@@ -79,7 +80,7 @@ export function renderSVG() {
     const p = pos.get(job.name); if (!p) continue;
     const isRoot = !graph.edges.some(e => e.to   === job.name);
     const isLeaf = !graph.edges.some(e => e.from === job.name);
-    const isSel = job.name === selected, isConn = conn.has(job.name);
+    const isSel = job.name === hiJob, isConn = conn.has(job.name);
     const isUp = upstream.has(job.name), isDown = downstream.has(job.name);
     const groupRaw = job.sub || job.app || job.folder || '';
     const isPrev = previewGroup && groupRaw === previewGroup;
@@ -87,7 +88,7 @@ export function renderSVG() {
 
     const fill   = isPrev ? '#3d2e00' : isSel ? '#1a3a6b' : isUp ? '#2a2000' : isDown ? '#0d2a18' : isRoot ? '#163020' : isLeaf ? '#1a2640' : '#1c2330';
     const stroke = isPrev ? '#e3b341' : isSel ? '#388bfd' : isUp ? '#d29922' : isDown ? '#3fb950'
-                 : (isConn && selected) ? '#388bfd' : isRoot ? '#2ea043' : isLeaf ? '#388bfd' : '#30363d';
+                 : (isConn && hiJob) ? '#388bfd' : isRoot ? '#2ea043' : isLeaf ? '#388bfd' : '#30363d';
 
     const label   = job.name.length > 25 ? job.name.slice(0, 24) + '…' : job.name;
     const rawMeta = job.desc || '';
@@ -114,9 +115,9 @@ export function renderSVG() {
     const metaColor = isPrev ? '#e3b341cc' : isSel ? '#ffffffaa' : isUp ? '#d29922aa' : isDown ? '#3fb950aa' : '#8b949e';
     const groupColor = isPrev ? '#e3b341' : groupActive ? '#58a6ff' : isSel ? '#79b8ff' : isUp ? '#d29922' : isDown ? '#3fb950' : '#8b949e';
 
-    nH += `<g class="jn" data-job="${esc(job.name)}" style="cursor:pointer" opacity="${dim ? .16 : 1}">
+    nH += `<g class="jn" data-job="${esc(job.name)}" style="cursor:grab" opacity="${dim ? .16 : 1}">
   <rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="7" fill="${fill}" stroke="${stroke}" stroke-width="${(isPrev || isSel || isUp || isDown) ? 2.4 : 1.5}"/>
-  ${groupS ? `<text class="jn-group" data-group="${esc(groupRaw)}" x="${p.x + NW / 2}" y="${groupY}" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="${groupColor}" title="그룹 미리보기: ${esc(groupRaw)}">${esc(groupS)}</text>` : ''}
+  ${groupS ? `<text class="jn-group" data-group="${esc(groupRaw)}" x="${p.x + NW / 2}" y="${groupY}" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="${groupColor}" title="클릭: 이 그룹으로 이동">${esc(groupS)}</text>` : ''}
   <text x="${p.x + NW / 2}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="${(isPrev || isSel || isUp || isDown) ? 700 : 600}" fill="${nameColor}" font-family="monospace" style="pointer-events:none">${esc(label)}</text>
   ${metaS ? `<text x="${p.x + NW / 2}" y="${metaY}" text-anchor="middle" font-size="9" fill="${metaColor}" style="pointer-events:none">${esc(metaS)}</text>` : ''}
   ${badges}

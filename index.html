@@ -143,6 +143,12 @@
       <span class="group-filter-count" id="group-filter-count"></span>
       <button type="button" class="group-filter-clear" id="btn-clear-group" title="그룹 필터 해제">✕</button>
     </div>
+    <div class="job-preview-bar" id="job-preview-bar" style="display:none">
+      <span class="job-preview-label">선후행</span>
+      <span class="job-preview-name" id="job-preview-name"></span>
+      <button type="button" class="job-preview-go" id="btn-job-preview-go" title="이 배치 선후행으로 이동">이동</button>
+      <button type="button" class="job-preview-clear" id="btn-job-preview-clear" title="강조 해제">✕</button>
+    </div>
     <aside class="group-side-panel right" id="group-side-panel" style="display:none">
       <div class="group-side-hdr">
         <div>
@@ -159,6 +165,8 @@
     </aside>
     <div class="ctrl" id="ctrl">
       <button class="ctrl-btn ctrl-btn-wide" id="btn-group-panel" title="그룹 내역 열기/닫기">그룹보기</button>
+      <div class="ctrl-sep"></div>
+      <button class="ctrl-btn ctrl-btn-wide" id="btn-reset-layout" title="박스 위치를 자동배치 상태로 되돌리기">위치초기화</button>
       <div class="ctrl-sep"></div>
       <button class="ctrl-btn" id="btn-fit" title="화면 맞추기">⊡</button>
       <div class="ctrl-sep"></div>

@@ -5,13 +5,11 @@ export let ftreeQuery = '';
 
 let _onFocusJob = null;
 let _onClearFocus = null;
-let _onGroupFilter = null;
 
-/** main.js에서 showJobFocusDiagram / showAllDiagram / setGroupFilter 연결 */
-export function bindFocusHandlers(onFocus, onClear, onGroup) {
+/** main.js에서 showJobFocusDiagram / showAllDiagram 연결 */
+export function bindFocusHandlers(onFocus, onClear) {
   _onFocusJob = onFocus;
   _onClearFocus = onClear;
-  _onGroupFilter = onGroup || null;
 }
 
 export function buildReachableSet(name) {
@@ -40,6 +38,14 @@ export function clearFocus() {
 }
 
 export function updateBatchQuickSel() { renderFocusTree(''); }
+
+function toggleTreeSection(hdr, arrowSel) {
+  const body = hdr.nextElementSibling;
+  if (!body) return;
+  const arrow = hdr.querySelector(arrowSel);
+  const collapsed = body.classList.toggle('collapsed');
+  arrow?.classList.toggle('open', !collapsed);
+}
 
 export function renderFocusTree(q) {
   const g = S.graph;
@@ -78,7 +84,6 @@ export function renderFocusTree(q) {
       if (!visible.length) continue;
       appCount += visible.length; totalVisible += visible.length;
 
-      const subId = `ftgsub-${btoa(unescape(encodeURIComponent(app + sub))).slice(0, 12)}`;
       const jobsHtml = visible.map(j => {
         const isFoc = S.focusName === j.name;
         const dot = jobDotColor(j.name);
@@ -91,26 +96,25 @@ export function renderFocusTree(q) {
       }).join('');
 
       appHtml += `<div class="ftg-sub">
-  <div class="ftg-sub-hdr" data-ftgsub="${subId}">
+  <div class="ftg-sub-hdr" title="클릭하여 목록 접기/펼치기">
     <span class="ftg-sub-arrow open">▶</span>
-    <span class="ftg-sub-name${S.groupFilter === sub ? ' on' : S.groupPreview === sub ? ' on' : ''}" data-group-filter="${esc(sub)}" title="클릭: 그룹 색 강조">📁 ${esc(sub)}</span>
-    <span style="margin-left:auto;font-size:10px;color:var(--text3)">${visible.length}</span>
+    <span class="ftg-sub-name${S.groupFilter === sub || S.groupPreview === sub ? ' on' : ''}">📁 ${esc(sub)}</span>
+    <span class="ftg-sub-cnt">${visible.length}</span>
   </div>
-  <div id="${subId}">${jobsHtml}</div>
+  <div class="ftg-sub-body">${jobsHtml}</div>
 </div>`;
     }
 
     if (!appCount) continue;
-    const appId = `ftgapp-${btoa(unescape(encodeURIComponent(app))).slice(0, 12)}`;
     const isAppOpen = tree.size === 1 || !!ftreeQuery || appCount <= 20;
 
     html += `<div class="ftg-app">
-  <div class="ftg-app-hdr" data-ftgapp="${appId}">
+  <div class="ftg-app-hdr" title="클릭하여 목록 접기/펼치기">
     <span class="ftg-app-arrow${isAppOpen ? ' open' : ''}">▶</span>
     <span>📦 ${esc(app)}</span>
-    <span style="margin-left:auto;font-size:10px;color:var(--text3)">${appCount}개</span>
+    <span class="ftg-sub-cnt">${appCount}개</span>
   </div>
-  <div id="${appId}"${isAppOpen ? '' : ' style="display:none"'}>${appHtml}</div>
+  <div class="ftg-app-body${isAppOpen ? '' : ' collapsed'}">${appHtml}</div>
 </div>`;
   }
 
@@ -118,39 +122,28 @@ export function renderFocusTree(q) {
     html = `<div class="ftg-no-result">검색 결과 없음: "${esc(ftreeQuery)}"</div>`;
   }
 
-  $('ftree-body').innerHTML = html;
+  const body = $('ftree-body');
+  body.innerHTML = html;
 
-  $('ftree-body').querySelectorAll('.ftg-app-hdr').forEach(hdr => {
-    hdr.addEventListener('click', () => {
-      const body = $(hdr.dataset.ftgapp);
-      const arrow = hdr.querySelector('.ftg-app-arrow');
-      const open = body.style.display === 'none';
-      body.style.display = open ? '' : 'none';
-      arrow.classList.toggle('open', open);
-    });
-  });
-
-  $('ftree-body').querySelectorAll('.ftg-sub-hdr').forEach(hdr => {
+  body.querySelectorAll('.ftg-app-hdr').forEach(hdr => {
     hdr.addEventListener('click', e => {
-      if (e.target.closest?.('[data-group-filter]')) return;
-      const body = $(hdr.dataset.ftgsub);
-      const arrow = hdr.querySelector('.ftg-sub-arrow');
-      const isHidden = body.style.display === 'none';
-      body.style.display = isHidden ? '' : 'none';
-      arrow.classList.toggle('open', isHidden);
-    });
-  });
-
-  $('ftree-body').querySelectorAll('[data-group-filter]').forEach(el => {
-    el.addEventListener('click', e => {
+      e.preventDefault();
       e.stopPropagation();
-      const group = el.getAttribute('data-group-filter');
-      if (group && _onGroupFilter) _onGroupFilter(group);
+      toggleTreeSection(hdr, '.ftg-app-arrow');
     });
   });
 
-  $('ftree-body').querySelectorAll('.ftg-job').forEach(item => {
-    item.addEventListener('click', () => {
+  body.querySelectorAll('.ftg-sub-hdr').forEach(hdr => {
+    hdr.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleTreeSection(hdr, '.ftg-sub-arrow');
+    });
+  });
+
+  body.querySelectorAll('.ftg-job').forEach(item => {
+    item.addEventListener('click', e => {
+      e.stopPropagation();
       const name = item.dataset.focus;
       if (name === S.focusName) clearFocus();
       else setFocus(name);

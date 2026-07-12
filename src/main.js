@@ -2,12 +2,13 @@ import './style.css';
 
 import { S, API } from './state.js';
 import { $, svg, applyTransform } from './utils.js';
-import { fitView } from './renderer.js';
+import { fitView, renderSVG } from './renderer.js';
 import { clearFocus, renderFocusTree, setFocus, bindFocusHandlers } from './focus.js';
 import {
   setTab, closeDetail,
   generate, clearAll, openSettings, closeSettings,
   showJobFocusDiagram, showAllDiagram, loadXmlAsJobList, setGroupFilter, toggleGroupPanel, goToGroupPreview,
+  setJobPreview, goToJobPreview, resetLayoutPositions,
 } from './ui.js';
 import { exportExcel } from './excel.js';
 import { doSearch } from './search.js';
@@ -19,14 +20,14 @@ import {
 import { initResizableSidebar } from './sidebar.js';
 
 // 포커스 핸들러 연결 (순환 참조 방지)
-bindFocusHandlers(showJobFocusDiagram, showAllDiagram, setGroupFilter);
+bindFocusHandlers(showJobFocusDiagram, showAllDiagram);
 
 window.closeDetail = closeDetail;
 window.setFocus    = setFocus;
 window.clearFocus  = clearFocus;
 window.closeSettings = closeSettings;
 
-// ── Pan & Zoom ────────────────────────────────────────────────────────────────
+// ── Pan / Zoom / 배치 드래그 ──────────────────────────────────────────────────
 svg.addEventListener('wheel', e => {
   e.preventDefault();
   const r = svg.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
@@ -38,28 +39,105 @@ svg.addEventListener('wheel', e => {
 
 svg.addEventListener('mousedown', e => {
   if (e.button !== 0) return;
-  S.panStart = { cx: e.clientX, cy: e.clientY, vtx: S.vt.x, vty: S.vt.y }; S.panned = false;
+
+  // 박스 안 그룹 라벨: 드래그/팬 대신 클릭 대기
+  const grp = e.target.closest?.('.jn-group');
+  if (grp) {
+    S.groupClick = {
+      group: grp.getAttribute('data-group') || '',
+      cx: e.clientX,
+      cy: e.clientY,
+    };
+    S.nodeDrag = null;
+    S.panStart = null;
+    return;
+  }
+
+  const jn = e.target.closest?.('.jn');
+  if (jn && S.pos) {
+    const name = jn.getAttribute('data-job');
+    const p = name && S.pos.get(name);
+    if (name && p) {
+      S.nodeDrag = {
+        name,
+        cx: e.clientX,
+        cy: e.clientY,
+        ox: p.x,
+        oy: p.y,
+        moved: false,
+      };
+      S.panStart = null;
+      S.panned = false;
+      svg.classList.add('dragging-node');
+      return;
+    }
+  }
+
+  S.groupClick = null;
+  S.nodeDrag = null;
+  S.panStart = { cx: e.clientX, cy: e.clientY, vtx: S.vt.x, vty: S.vt.y };
+  S.panned = false;
 });
+
 document.addEventListener('mousemove', e => {
+  if (S.groupClick) {
+    // 그룹 라벨에서 드래그로 벗어나면 클릭 취소
+    if (Math.abs(e.clientX - S.groupClick.cx) > 4 || Math.abs(e.clientY - S.groupClick.cy) > 4) {
+      S.groupClick = null;
+    }
+    return;
+  }
+
+  if (S.nodeDrag) {
+    const dx = (e.clientX - S.nodeDrag.cx) / S.vt.s;
+    const dy = (e.clientY - S.nodeDrag.cy) / S.vt.s;
+    if (!S.nodeDrag.moved && (Math.abs(e.clientX - S.nodeDrag.cx) > 3 || Math.abs(e.clientY - S.nodeDrag.cy) > 3)) {
+      S.nodeDrag.moved = true;
+    }
+    if (S.nodeDrag.moved && S.pos) {
+      S.pos.set(S.nodeDrag.name, {
+        x: S.nodeDrag.ox + dx,
+        y: S.nodeDrag.oy + dy,
+      });
+      renderSVG();
+    }
+    return;
+  }
+
   if (!S.panStart) return;
   const dx = e.clientX - S.panStart.cx, dy = e.clientY - S.panStart.cy;
   if (!S.panned && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) { S.panned = true; svg.classList.add('panning'); }
   if (S.panned) { S.vt.x = S.panStart.vtx + dx; S.vt.y = S.panStart.vty + dy; applyTransform(); }
 });
+
 document.addEventListener('mouseup', e => {
+  if (S.groupClick) {
+    const { group } = S.groupClick;
+    S.groupClick = null;
+    if (group) {
+      // 박스 안 그룹 클릭 → 해당 그룹으로 바로 이동
+      S.groupPreview = group;
+      S.jobPreview = null;
+      goToGroupPreview();
+    }
+    return;
+  }
+
+  if (S.nodeDrag) {
+    const drag = S.nodeDrag;
+    S.nodeDrag = null;
+    svg.classList.remove('dragging-node');
+    if (!drag.moved && drag.name) setJobPreview(drag.name);
+    return;
+  }
+
   if (!S.panStart) return;
   const didPan = S.panned; S.panStart = null; S.panned = false; svg.classList.remove('panning');
   if (!didPan) {
-    const grp = e.target.closest?.('.jn-group');
-    if (grp) {
-      const group = grp.getAttribute('data-group');
-      if (group) setGroupFilter(group);
-      return;
-    }
     const jn = e.target.closest?.('.jn');
     if (jn) {
       const name = jn.getAttribute('data-job');
-      if (name) showJobFocusDiagram(name);
+      if (name) setJobPreview(name);
     }
   }
 });
@@ -104,10 +182,13 @@ $('btn-back').onclick    = () => setTab('input');
 $('btn-fit').onclick     = fitView;
 $('btn-zi').onclick      = () => { S.vt.s = Math.min(3, S.vt.s * 1.2); applyTransform(); };
 $('btn-zo').onclick      = () => { S.vt.s = Math.max(.1, S.vt.s * .83); applyTransform(); };
+$('btn-reset-layout').onclick = () => resetLayoutPositions();
 $('btn-clear-group').onclick = () => setGroupFilter(null);
 $('btn-group-panel').onclick = () => toggleGroupPanel();
 $('btn-close-group-panel').onclick = () => toggleGroupPanel(false);
 $('btn-group-side-go').onclick = () => goToGroupPreview();
+$('btn-job-preview-go').onclick = () => goToJobPreview();
+$('btn-job-preview-clear').onclick = () => setJobPreview(null);
 $('btn-group-side-all').onclick = () => setGroupFilter(null);
 $('group-side-list').addEventListener('click', e => {
   const btn = e.target.closest?.('[data-group-preview]');

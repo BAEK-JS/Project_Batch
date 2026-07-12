@@ -181,6 +181,64 @@ function updateGroupFilterBar(inGroupCount) {
     bar.classList.remove('on');
     bar.style.display = 'none';
   }
+  updateJobPreviewBar();
+}
+
+function updateJobPreviewBar() {
+  const bar = $('job-preview-bar');
+  if (!bar) return;
+  if (S.jobPreview) {
+    bar.classList.add('on');
+    bar.style.display = 'flex';
+    bar.classList.toggle('offset', !!S.groupFilter);
+    $('job-preview-name').textContent = S.jobPreview;
+  } else {
+    bar.classList.remove('on', 'offset');
+    bar.style.display = 'none';
+  }
+}
+
+/** 다이어그램 배치 클릭: 선후행 색 강조만 (레이아웃 유지) */
+export function setJobPreview(name) {
+  if (!name) {
+    S.jobPreview = null;
+  } else if (S.jobPreview === name) {
+    S.jobPreview = null;
+  } else {
+    S.jobPreview = name;
+    S.groupPreview = null; // 그룹 미리보기와 겹치지 않게
+  }
+  updateJobPreviewBar();
+  renderSVG();
+}
+
+/** 강조된 배치의 선후행 화면으로 이동 */
+export function goToJobPreview() {
+  if (!S.jobPreview) return;
+  const name = S.jobPreview;
+  S.jobPreview = null;
+  updateJobPreviewBar();
+  showJobFocusDiagram(name);
+}
+
+/** 박스 위치를 자동배치 스냅샷으로 복원 */
+export function resetLayoutPositions() {
+  if (!S.layoutSnapshot?.size || !S.pos) return;
+  for (const [name, p] of S.layoutSnapshot) {
+    S.pos.set(name, { x: p.x, y: p.y });
+  }
+  renderSVG();
+  setTimeout(fitView, 30);
+}
+
+function snapshotLayout() {
+  if (!S.pos?.size) {
+    S.layoutSnapshot = null;
+    return;
+  }
+  S.layoutSnapshot = new Map(
+    [...S.pos].map(([name, p]) => [name, { x: p.x, y: p.y }])
+  );
 }
 
 function updateGroupPanelToggleBtn() {
@@ -299,6 +357,8 @@ export function setGroupPreview(group) {
   } else {
     S.groupPreview = group;
     S.groupPanelOpen = true;
+    S.jobPreview = null;
+    updateJobPreviewBar();
   }
 
   // 다른 그룹 미리보기: 처음 전체로 풀지 않고, 현재 groupScope(이동한 화면) 유지
@@ -352,6 +412,7 @@ export function applyDiagramView() {
 
   S.viewGraph = (S.focusName || S.groupScope) ? subGraph : null;
   S.pos = computeLayout(subGraph, { compact: !!S.groupScope });
+  snapshotLayout();
 
   $('empty').style.display = 'none';
   svg.style.display = 'block';
@@ -384,7 +445,7 @@ export function setGroupFilter(group) {
 }
 
 export function loadGraphAsJobList(graph, label = '') {
-  S.graph = graph; S.pos = null; S.selected = null; S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPreview = null; S.groupPanelOpen = false; S.groupScope = null; S.viewGraph = null;
+  S.graph = graph; S.pos = null; S.selected = null; S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPreview = null; S.groupPanelOpen = false; S.groupScope = null; S.viewGraph = null; S.jobPreview = null; S.layoutSnapshot = null;
   $('err-msg').style.display = 'none';
   svg.style.display = 'none';
   dagRoot.innerHTML = '';
@@ -421,9 +482,11 @@ export function showJobFocusDiagram(jobName) {
   if (!S.graph || !jobName) return;
   S.selected = jobName;
   S.focusName = jobName;
+  S.jobPreview = null;
   S.groupFilter = null;
   S.groupPreview = null;
   S.groupScope = null;
+  updateJobPreviewBar();
   $('tab-detail').style.display = '';
   applyDiagramView();
   renderDetail(jobName);
@@ -434,11 +497,13 @@ export function showAllDiagram() {
   if (!S.graph) return;
   S.selected = null;
   S.focusName = null;
+  S.jobPreview = null;
   S.groupFilter = null;
   S.groupPreview = null;
   S.groupScope = null;
   S.viewGraph = null;
   S.focusSet = null;
+  updateJobPreviewBar();
   applyDiagramView();
 }
 
@@ -446,7 +511,7 @@ export function generate(xmlStr) {
   try {
     const graph = parseXML(xmlStr);
     S.graph = graph; S.selected = null;
-    S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPreview = null; S.groupPanelOpen = false; S.groupScope = null; S.viewGraph = null;
+    S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPreview = null; S.groupPanelOpen = false; S.groupScope = null; S.viewGraph = null; S.jobPreview = null; S.layoutSnapshot = null;
     $('err-msg').style.display = 'none';
     $('btn-clear').style.display = '';
     $('tab-jobs').style.display = ''; $('tab-ai').style.display = ''; $('tab-search').style.display = '';
@@ -463,7 +528,7 @@ export function generate(xmlStr) {
 }
 
 export function clearAll() {
-  S.graph = null; S.pos = null; S.selected = null; S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPreview = null; S.groupPanelOpen = false; S.groupScope = null; S.viewGraph = null;
+  S.graph = null; S.pos = null; S.selected = null; S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPreview = null; S.groupPanelOpen = false; S.groupScope = null; S.viewGraph = null; S.jobPreview = null; S.layoutSnapshot = null;
   updateGroupFilterBar();
   const panel = $('group-side-panel');
   if (panel) { panel.classList.remove('on'); panel.style.display = 'none'; }
