@@ -15,9 +15,15 @@ export function renderSVG() {
 
   const conn = new Set(), hiE = new Set();
   const upstream = new Set(), downstream = new Set();
-  const previewGroup = S.groupPreview;
+  const jobNames = new Set(graph.jobs.map(j => j.name));
+  // 현재 화면에 해당 그룹 잡이 있을 때만 미리보기 강조(없으면 전체 흐림 방지)
+  const previewGroup = S.groupPreview && graph.jobs.some(
+    j => (j.sub || j.app || j.folder || '') === S.groupPreview
+  ) ? S.groupPreview : null;
   // 배치 미리보기(클릭) 또는 선택 잡 기준으로 선후행 색 강조
-  const hiJob = S.jobPreview || (!previewGroup ? selected : null);
+  // 현재 viewGraph에 없는 잡은 강조 무시 → 그룹 진입 후 전체가 어두워지는 문제 방지
+  const hiJobRaw = S.jobPreview || (!previewGroup ? selected : null);
+  const hiJob = hiJobRaw && jobNames.has(hiJobRaw) ? hiJobRaw : null;
   const pathHi = !!hiJob;
 
   if (pathHi) {
@@ -67,7 +73,7 @@ export function renderSVG() {
     const isDownEdge = isHi && downstream.has(e.to) && (downstream.has(e.from) || e.from === hiJob);
     const edgeColor  = isPrevEdge ? '#d29922' : isUpEdge ? '#d29922' : isDownEdge ? '#3fb950' : '#388bfd';
     const arwId      = isPrevEdge ? 'arw-up' : isUpEdge ? 'arw-up' : isDownEdge ? 'arw-down' : isHi ? 'arw-hi' : 'arw';
-    eH += `<path d="M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}" fill="none" stroke="${(isHi || isPrevEdge) ? edgeColor : '#444c56'}" stroke-width="${(isHi || isPrevEdge) ? 2.2 : 1.5}" opacity="${dim ? .1 : 1}" marker-end="url(#${arwId})"/>`;
+    eH += `<path data-from="${esc(e.from)}" data-to="${esc(e.to)}" d="M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}" fill="none" stroke="${(isHi || isPrevEdge) ? edgeColor : '#444c56'}" stroke-width="${(isHi || isPrevEdge) ? 2.2 : 1.5}" opacity="${dim ? .1 : 1}" marker-end="url(#${arwId})"/>`;
     if (isHi && !previewGroup) {
       const lx = (sx + tx) / 2, ly = (sy + ty) / 2, tw = e.cond.length * 5.4 + 14;
       lH += `<rect x="${lx - tw / 2}" y="${ly - 15}" width="${tw}" height="14" rx="3" fill="#0f1117" fill-opacity=".92"/>
@@ -125,6 +131,35 @@ export function renderSVG() {
   }
 
   dagRoot.innerHTML = eH + nH + lH;
+}
+
+/** 드래그 중: 해당 노드·연결선만 갱신 (전체 innerHTML 재생성 없음) */
+export function updateDraggedNode(name) {
+  if (!S.pos || !S.nodeDrag || S.nodeDrag.name !== name) return;
+  const p = S.pos.get(name);
+  if (!p) return;
+
+  const dx = p.x - S.nodeDrag.ox;
+  const dy = p.y - S.nodeDrag.oy;
+
+  for (const g of dagRoot.querySelectorAll('.jn')) {
+    if (g.getAttribute('data-job') === name) {
+      g.setAttribute('transform', `translate(${dx},${dy})`);
+      break;
+    }
+  }
+
+  for (const path of dagRoot.querySelectorAll('path[data-from]')) {
+    const from = path.getAttribute('data-from');
+    const to = path.getAttribute('data-to');
+    if (from !== name && to !== name) continue;
+    const sp = S.pos.get(from), tp = S.pos.get(to);
+    if (!sp || !tp) continue;
+    const sx = sp.x + NW, sy = sp.y + NH / 2;
+    const tx = tp.x, ty = tp.y + NH / 2;
+    const mx = (sx + tx) / 2;
+    path.setAttribute('d', `M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}`);
+  }
 }
 
 export function fitView() {

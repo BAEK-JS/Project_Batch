@@ -2,15 +2,16 @@ import './style.css';
 
 import { S, API } from './state.js';
 import { $, svg, applyTransform } from './utils.js';
-import { fitView, renderSVG } from './renderer.js';
+import { fitView, renderSVG, updateDraggedNode } from './renderer.js';
 import { clearFocus, renderFocusTree, setFocus, bindFocusHandlers } from './focus.js';
 import {
   setTab, closeDetail,
-  generate, clearAll, openSettings, closeSettings,
+  generate, clearAll, openSettings, closeSettings, syncSettingsProviderUI,
   showJobFocusDiagram, showAllDiagram, loadXmlAsJobList, setGroupFilter, toggleGroupPanel, goToGroupPreview,
-  setJobPreview, goToJobPreview, resetLayoutPositions,
+  setJobPreview, goToJobPreview, resetLayoutPositions, goBackView, showGroupDiagram,
 } from './ui.js';
 import { exportExcel } from './excel.js';
+import { exportDiagramSvg } from './exportSvg.js';
 import { doSearch } from './search.js';
 import { renderAIPane } from './ai.js';
 import { SAMPLE } from './sample.js';
@@ -20,7 +21,7 @@ import {
 import { initResizableSidebar } from './sidebar.js';
 
 // 포커스 핸들러 연결 (순환 참조 방지)
-bindFocusHandlers(showJobFocusDiagram, showAllDiagram);
+bindFocusHandlers(showJobFocusDiagram, showAllDiagram, showGroupDiagram);
 
 window.closeDetail = closeDetail;
 window.setFocus    = setFocus;
@@ -99,7 +100,13 @@ document.addEventListener('mousemove', e => {
         x: S.nodeDrag.ox + dx,
         y: S.nodeDrag.oy + dy,
       });
-      renderSVG();
+      // 전체 SVG 재생성 대신, 다음 프레임에 해당 노드·선만 갱신
+      if (!S.dragRaf) {
+        S.dragRaf = requestAnimationFrame(() => {
+          S.dragRaf = 0;
+          if (S.nodeDrag?.moved) updateDraggedNode(S.nodeDrag.name);
+        });
+      }
     }
     return;
   }
@@ -127,7 +134,16 @@ document.addEventListener('mouseup', e => {
     const drag = S.nodeDrag;
     S.nodeDrag = null;
     svg.classList.remove('dragging-node');
-    if (!drag.moved && drag.name) setJobPreview(drag.name);
+    if (S.dragRaf) {
+      cancelAnimationFrame(S.dragRaf);
+      S.dragRaf = 0;
+    }
+    if (drag.moved) {
+      // 드래그 종료 시 한 번만 전체 동기화 (transform 제거·좌표 반영)
+      renderSVG();
+    } else if (drag.name) {
+      setJobPreview(drag.name);
+    }
     return;
   }
 
@@ -183,12 +199,18 @@ $('btn-fit').onclick     = fitView;
 $('btn-zi').onclick      = () => { S.vt.s = Math.min(3, S.vt.s * 1.2); applyTransform(); };
 $('btn-zo').onclick      = () => { S.vt.s = Math.max(.1, S.vt.s * .83); applyTransform(); };
 $('btn-reset-layout').onclick = () => resetLayoutPositions();
-$('btn-clear-group').onclick = () => setGroupFilter(null);
+$('btn-export-svg').onclick = () => exportDiagramSvg();
 $('btn-group-panel').onclick = () => toggleGroupPanel();
 $('btn-close-group-panel').onclick = () => toggleGroupPanel(false);
 $('btn-group-side-go').onclick = () => goToGroupPreview();
 $('btn-job-preview-go').onclick = () => goToJobPreview();
 $('btn-job-preview-clear').onclick = () => setJobPreview(null);
+$('btn-focus-back').onclick = () => goBackView();
+$('btn-focus-clear').onclick = () => showAllDiagram();
+$('btn-clear-group').onclick = () => {
+  if (S.viewHistory?.length) goBackView();
+  else setGroupFilter(null);
+};
 $('btn-group-side-all').onclick = () => setGroupFilter(null);
 $('group-side-list').addEventListener('click', e => {
   const btn = e.target.closest?.('[data-group-preview]');
@@ -247,8 +269,15 @@ $('filter-tree-hdr').addEventListener('click', () => {
 $('btn-save-api').onclick = () => {
   const keyVal = $('api-key-inp').value.trim();
   if (keyVal) API.key = keyVal;
-  API.baseUrl   = $('api-url-inp').value.trim() || 'https://api.openai.com/v1';
-  API.chatModel = $('api-model-sel').value;
+  API.provider = $('api-provider-sel').value;
+  const urlVal = $('api-url-inp').value.trim();
+  if (API.provider === 'dify') {
+    API.baseUrl = urlVal; // 필수 — 비우면 저장 시 클리어
+    API.userId = ($('api-user-inp')?.value || '').trim() || 'batch-diagram';
+  } else {
+    API.baseUrl = urlVal || 'https://api.openai.com/v1';
+    API.chatModel = $('api-model-sel').value;
+  }
   closeSettings();
   if (S.tab === 'ai') renderAIPane();
 };
@@ -257,5 +286,8 @@ $('btn-del-key').onclick = () => {
   API.key = ''; closeSettings();
   if (S.tab === 'ai') renderAIPane();
 };
+$('api-provider-sel')?.addEventListener('change', () => {
+  syncSettingsProviderUI($('api-provider-sel').value);
+});
 
 initResizableSidebar();

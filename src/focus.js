@@ -5,11 +5,13 @@ export let ftreeQuery = '';
 
 let _onFocusJob = null;
 let _onClearFocus = null;
+let _onShowGroup = null;
 
-/** main.js에서 showJobFocusDiagram / showAllDiagram 연결 */
-export function bindFocusHandlers(onFocus, onClear) {
+/** main.js에서 showJobFocusDiagram / showAllDiagram / showGroupDiagram 연결 */
+export function bindFocusHandlers(onFocus, onClear, onGroup) {
   _onFocusJob = onFocus;
   _onClearFocus = onClear;
+  _onShowGroup = onGroup || null;
 }
 
 export function buildReachableSet(name) {
@@ -28,9 +30,14 @@ export function buildReachableSet(name) {
   return set;
 }
 
-export function setFocus(name) {
+export function setFocus(name, opts) {
   if (!name) { clearFocus(); return; }
-  if (_onFocusJob) _onFocusJob(name);
+  if (_onFocusJob) _onFocusJob(name, opts);
+}
+
+export function setGroupFocus(name, opts) {
+  if (!name) return;
+  if (_onShowGroup) _onShowGroup(name, opts);
 }
 
 export function clearFocus() {

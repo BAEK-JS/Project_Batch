@@ -161,6 +161,114 @@ export function jobGroupKey(job) {
   return job?.sub || job?.app || job?.folder || '';
 }
 
+function updateFocusNavBar() {
+  const bar = $('focus-nav-bar');
+  if (!bar) return;
+  if (S.focusName) {
+    bar.classList.add('on');
+    bar.style.display = 'flex';
+    $('focus-nav-name').textContent = S.focusName;
+    const countEl = $('focus-nav-count');
+    if (countEl) {
+      const n = S.focusSet?.size || 0;
+      countEl.textContent = n ? `${n}개` : '';
+    }
+    const backBtn = $('btn-focus-back');
+    if (backBtn) {
+      const depth = S.viewHistory?.length || 0;
+      backBtn.textContent = depth ? `← 뒤로` : '← 전체';
+      backBtn.title = depth
+        ? '직전 화면으로 돌아가기'
+        : '전체 다이어그램으로 돌아가기';
+    }
+  } else {
+    bar.classList.remove('on');
+    bar.style.display = 'none';
+  }
+  // 바 스택 위치 재계산
+  updateBarOffsets();
+}
+
+function snapshotView() {
+  return {
+    focusName: S.focusName,
+    selected: S.selected,
+    groupFilter: S.groupFilter,
+    groupScope: S.groupScope ? [...S.groupScope] : null,
+  };
+}
+
+function viewsEqual(a, b) {
+  if (!a || !b) return false;
+  if (a.focusName !== b.focusName) return false;
+  if (a.groupFilter !== b.groupFilter) return false;
+  const as = a.groupScope || [];
+  const bs = b.groupScope || [];
+  if (as.length !== bs.length) return false;
+  if (as.length) {
+    const setB = new Set(bs);
+    for (const n of as) if (!setB.has(n)) return false;
+  }
+  return true;
+}
+
+function pushViewHistory() {
+  if (S._restoringView) return;
+  if (!S.viewHistory) S.viewHistory = [];
+  const snap = snapshotView();
+  const last = S.viewHistory[S.viewHistory.length - 1];
+  if (last && viewsEqual(last, snap)) return;
+  S.viewHistory.push(snap);
+  if (S.viewHistory.length > 40) S.viewHistory.shift();
+}
+
+function clearViewHistory() {
+  S.viewHistory = [];
+}
+
+/** 직전 화면으로 한 단계 복귀 (없으면 전체) */
+export function goBackView() {
+  if (!S.viewHistory?.length) {
+    showAllDiagram();
+    return;
+  }
+  const snap = S.viewHistory.pop();
+  S._restoringView = true;
+  try {
+    S.focusName = snap.focusName;
+    S.selected = snap.selected;
+    S.groupFilter = snap.groupFilter;
+    S.groupScope = snap.groupScope?.length ? new Set(snap.groupScope) : null;
+    S.groupPreview = null;
+    S.jobPreview = null;
+    if (S.focusName) {
+      $('tab-detail').style.display = '';
+      applyDiagramView();
+      renderDetail(S.focusName);
+      setTab('detail');
+    } else {
+      applyDiagramView();
+    }
+  } finally {
+    S._restoringView = false;
+  }
+}
+
+function updateBarOffsets() {
+  const hasFocus = !!S.focusName;
+  const hasGroup = !!S.groupFilter;
+  const groupBar = $('group-filter-bar');
+  const previewBar = $('job-preview-bar');
+  if (groupBar) {
+    groupBar.classList.toggle('offset', hasFocus);
+  }
+  if (previewBar) {
+    const above = (hasFocus ? 1 : 0) + (hasGroup ? 1 : 0);
+    previewBar.classList.toggle('offset', above === 1);
+    previewBar.classList.toggle('offset2', above >= 2);
+  }
+}
+
 function updateGroupFilterBar(inGroupCount) {
   const bar = $('group-filter-bar');
   if (!bar) return;
@@ -181,6 +289,7 @@ function updateGroupFilterBar(inGroupCount) {
     bar.classList.remove('on');
     bar.style.display = 'none';
   }
+  updateFocusNavBar();
   updateJobPreviewBar();
 }
 
@@ -190,12 +299,12 @@ function updateJobPreviewBar() {
   if (S.jobPreview) {
     bar.classList.add('on');
     bar.style.display = 'flex';
-    bar.classList.toggle('offset', !!S.groupFilter);
     $('job-preview-name').textContent = S.jobPreview;
   } else {
-    bar.classList.remove('on', 'offset');
+    bar.classList.remove('on', 'offset', 'offset2');
     bar.style.display = 'none';
   }
+  updateBarOffsets();
 }
 
 /** 다이어그램 배치 클릭: 선후행 색 강조만 (레이아웃 유지) */
@@ -377,17 +486,30 @@ export function setGroupPreview(group) {
 /** 이동: 현재 범위 안에서 그룹으로 좁히고, 그 결과가 다음 그룹보기의 새 기준 */
 export function goToGroupPreview() {
   if (!S.groupPreview) return;
-  const group = S.groupPreview;
+  showGroupDiagram(S.groupPreview);
+}
+
+/** 그룹 단위로 다이어그램 범위 이동 @param {{ keepTab?: boolean }} [opts] */
+export function showGroupDiagram(group, opts = {}) {
+  if (!S.graph || !group) return;
   const scope = getGroupScopeNames();
   const built = buildGroupViewNames(scope, group);
+  if (!built.names.size) return false;
 
+  pushViewHistory();
   S.groupPreview = null;
+  S.jobPreview = null;
   S.groupFilter = group;
-  S.groupScope = new Set(built.names); // 이동한 화면 = 이후 그룹보기 기준
+  S.groupScope = new Set(built.names);
   S.groupPanelOpen = false;
   if (!S.focusName) S.selected = null;
   applyDiagramView();
   updateGroupPanelToggleBtn();
+  updateJobPreviewBar();
+  if (!opts.keepTab) {
+    // 기본: 탭 유지하지 않음 — AI에서 keepTab:true 로 호출
+  }
+  return true;
 }
 
 /** 현재 포커스(+그룹 범위) 기준으로 레이아웃/렌더 */
@@ -411,6 +533,9 @@ export function applyDiagramView() {
   };
 
   S.viewGraph = (S.focusName || S.groupScope) ? subGraph : null;
+  // 현재 화면에 없는 선택/미리보기는 해제
+  if (S.jobPreview && !names.has(S.jobPreview)) S.jobPreview = null;
+  if (S.selected && !names.has(S.selected)) S.selected = null;
   S.pos = computeLayout(subGraph, { compact: !!S.groupScope });
   snapshotLayout();
 
@@ -418,6 +543,7 @@ export function applyDiagramView() {
   svg.style.display = 'block';
   $('ctrl').classList.add('on'); $('legend').classList.add('on');
   updateGroupFilterBar(inGroupCount);
+  updateJobPreviewBar();
   // 그룹 목록은 항상 현재 화면에 있는 그룹만
   renderGroupSidePanel(names);
   renderSVG();
@@ -446,6 +572,7 @@ export function setGroupFilter(group) {
 
 export function loadGraphAsJobList(graph, label = '') {
   S.graph = graph; S.pos = null; S.selected = null; S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPreview = null; S.groupPanelOpen = false; S.groupScope = null; S.viewGraph = null; S.jobPreview = null; S.layoutSnapshot = null;
+  clearViewHistory();
   $('err-msg').style.display = 'none';
   svg.style.display = 'none';
   dagRoot.innerHTML = '';
@@ -478,8 +605,12 @@ export function loadXmlAsJobList(xmlStr, label = '') {
   }
 }
 
-export function showJobFocusDiagram(jobName) {
+export function showJobFocusDiagram(jobName, opts = {}) {
   if (!S.graph || !jobName) return;
+  // 같은 배치로 재진입이면 스택만 유지
+  const sameFocus = S.focusName === jobName && !S.groupFilter && !S.groupScope;
+  if (!sameFocus) pushViewHistory();
+
   S.selected = jobName;
   S.focusName = jobName;
   S.jobPreview = null;
@@ -490,11 +621,13 @@ export function showJobFocusDiagram(jobName) {
   $('tab-detail').style.display = '';
   applyDiagramView();
   renderDetail(jobName);
-  setTab('detail');
+  // AI 분석 등에서 탭 유지할 때 keepTab: true
+  if (!opts.keepTab) setTab('detail');
 }
 
 export function showAllDiagram() {
   if (!S.graph) return;
+  clearViewHistory();
   S.selected = null;
   S.focusName = null;
   S.jobPreview = null;
@@ -512,6 +645,7 @@ export function generate(xmlStr) {
     const graph = parseXML(xmlStr);
     S.graph = graph; S.selected = null;
     S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPreview = null; S.groupPanelOpen = false; S.groupScope = null; S.viewGraph = null; S.jobPreview = null; S.layoutSnapshot = null;
+    clearViewHistory();
     $('err-msg').style.display = 'none';
     $('btn-clear').style.display = '';
     $('tab-jobs').style.display = ''; $('tab-ai').style.display = ''; $('tab-search').style.display = '';
@@ -529,6 +663,7 @@ export function generate(xmlStr) {
 
 export function clearAll() {
   S.graph = null; S.pos = null; S.selected = null; S.focusSet = null; S.focusName = null; S.groupFilter = null; S.groupPreview = null; S.groupPanelOpen = false; S.groupScope = null; S.viewGraph = null; S.jobPreview = null; S.layoutSnapshot = null;
+  clearViewHistory();
   updateGroupFilterBar();
   const panel = $('group-side-panel');
   if (panel) { panel.classList.remove('on'); panel.style.display = 'none'; }
@@ -544,7 +679,7 @@ export function clearAll() {
   $('job-list').innerHTML = ''; $('detail-body').innerHTML = '';
   $('ai-inner').innerHTML = ''; $('search-results').innerHTML = '';
   EMB.built = false; EMB.building = false; EMB.data.clear();
-  AI.text = ''; AI.error = ''; AI.running = false; AI.history = [];
+  AI.text = ''; AI.error = ''; AI.running = false; AI.history = []; AI.conversationId = '';
   SRCH.results = []; SRCH.last = '';
   dagRoot.innerHTML = '';
   setTab('input');
@@ -553,11 +688,42 @@ export function clearAll() {
 export function openSettings() {
   const inp = $('api-key-inp');
   inp.value = '';
-  inp.placeholder = API.key ? '● '.repeat(8) + '(설정됨, 변경 시 새로 입력)' : 'sk-...';
-  $('api-url-inp').value = API.baseUrl !== 'https://api.openai.com/v1' ? API.baseUrl : '';
+  const prov = API.provider;
+  $('api-provider-sel').value = prov;
+  syncSettingsProviderUI(prov);
+  inp.placeholder = API.key
+    ? '● '.repeat(8) + '(설정됨, 변경 시 새로 입력)'
+    : (prov === 'dify' ? 'Dify API Key' : 'sk-...');
+  if (prov === 'dify') {
+    $('api-url-inp').value = API.baseUrl || '';
+  } else {
+    $('api-url-inp').value = API.baseUrl !== 'https://api.openai.com/v1' ? API.baseUrl : '';
+  }
   $('api-model-sel').value = API.chatModel;
+  if ($('api-user-inp')) $('api-user-inp').value = API.userId || 'batch-diagram';
   $('key-set-indicator').innerHTML = API.key ? '<span class="key-set-badge">✓ API 키 설정됨</span>' : '';
   $('settings-overlay').classList.add('on');
+}
+
+/** 설정 모달: OpenAI / Dify UI 전환 */
+export function syncSettingsProviderUI(provider) {
+  const isDify = provider === 'dify';
+  const modelGroup = $('api-model-group');
+  const userGroup = $('api-user-group');
+  const keyLabel = $('api-key-label');
+  const urlInp = $('api-url-inp');
+  const urlHint = $('api-url-hint');
+  if (modelGroup) modelGroup.style.display = isDify ? 'none' : '';
+  if (userGroup) userGroup.style.display = isDify ? '' : 'none';
+  if (keyLabel) keyLabel.textContent = isDify ? 'Dify API 키' : 'OpenAI API 키';
+  if (urlInp) {
+    urlInp.placeholder = isDify ? 'http://128.1.233.75/v1' : 'https://api.openai.com/v1';
+  }
+  if (urlHint) {
+    urlHint.textContent = isDify
+      ? 'Dify Base URL (/v1). chat-messages 경로는 자동 붙습니다.'
+      : 'OpenAI 호환 API (Azure OpenAI 등) 사용 시 변경';
+  }
 }
 
 export function closeSettings() { $('settings-overlay').classList.remove('on'); }

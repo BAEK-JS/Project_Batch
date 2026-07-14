@@ -137,6 +137,13 @@
       <defs id="svg-defs"></defs>
       <g id="dag-root"></g>
     </svg>
+    <div class="focus-nav-bar" id="focus-nav-bar" style="display:none">
+      <span class="focus-nav-label">선후행</span>
+      <span class="focus-nav-name" id="focus-nav-name"></span>
+      <span class="focus-nav-count" id="focus-nav-count"></span>
+      <button type="button" class="focus-nav-back" id="btn-focus-back" title="직전 화면으로 돌아가기">← 뒤로</button>
+      <button type="button" class="focus-nav-clear" id="btn-focus-clear" title="전체 다이어그램으로 바로 가기">전체</button>
+    </div>
     <div class="group-filter-bar" id="group-filter-bar" style="display:none">
       <span class="group-filter-label">그룹</span>
       <span class="group-filter-name" id="group-filter-name"></span>
@@ -144,7 +151,7 @@
       <button type="button" class="group-filter-clear" id="btn-clear-group" title="그룹 필터 해제">✕</button>
     </div>
     <div class="job-preview-bar" id="job-preview-bar" style="display:none">
-      <span class="job-preview-label">선후행</span>
+      <span class="job-preview-label">미리보기</span>
       <span class="job-preview-name" id="job-preview-name"></span>
       <button type="button" class="job-preview-go" id="btn-job-preview-go" title="이 배치 선후행으로 이동">이동</button>
       <button type="button" class="job-preview-clear" id="btn-job-preview-clear" title="강조 해제">✕</button>
@@ -167,6 +174,8 @@
       <button class="ctrl-btn ctrl-btn-wide" id="btn-group-panel" title="그룹 내역 열기/닫기">그룹보기</button>
       <div class="ctrl-sep"></div>
       <button class="ctrl-btn ctrl-btn-wide" id="btn-reset-layout" title="박스 위치를 자동배치 상태로 되돌리기">위치초기화</button>
+      <div class="ctrl-sep"></div>
+      <button class="ctrl-btn ctrl-btn-wide" id="btn-export-svg" title="현재 다이어그램 SVG 저장">그림저장</button>
       <div class="ctrl-sep"></div>
       <button class="ctrl-btn" id="btn-fit" title="화면 맞추기">⊡</button>
       <div class="ctrl-sep"></div>
@@ -192,7 +201,15 @@
     </div>
     <div class="modal-body">
       <div class="form-group">
-        <label class="form-label">OpenAI API 키</label>
+        <label class="form-label">연동 방식</label>
+        <select class="form-input" id="api-provider-sel">
+          <option value="openai">OpenAI / 호환 API</option>
+          <option value="dify">사내 LLM (Dify · Ollama)</option>
+        </select>
+        <span class="form-hint">사내 Ollama는 Dify <code>/v1/chat-messages</code> 방식으로 호출합니다</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label" id="api-key-label">API 키</label>
         <input type="password" class="form-input" id="api-key-inp" placeholder="sk-..." autocomplete="off">
         <div id="key-set-indicator"></div>
         <span class="form-hint warn">⚠ 키는 이 브라우저의 로컬스토리지에만 저장됩니다. 공유 PC 사용 후 꼭 삭제하세요.</span>
@@ -200,9 +217,9 @@
       <div class="form-group">
         <label class="form-label">API 엔드포인트</label>
         <input type="text" class="form-input" id="api-url-inp" placeholder="https://api.openai.com/v1">
-        <span class="form-hint">OpenAI 호환 API (Azure OpenAI, Local LLM 등) 사용 시 변경</span>
+        <span class="form-hint" id="api-url-hint">OpenAI 호환 API (Azure OpenAI 등) 사용 시 변경</span>
       </div>
-      <div class="form-group">
+      <div class="form-group" id="api-model-group">
         <label class="form-label">분석 모델</label>
         <select class="form-input" id="api-model-sel">
           <option value="gpt-4o-mini">GPT-4o mini (권장 · 빠름 · 저렴)</option>
@@ -211,6 +228,11 @@
           <option value="gpt-4.1">GPT-4.1</option>
           <option value="o4-mini">o4-mini (추론)</option>
         </select>
+      </div>
+      <div class="form-group" id="api-user-group" style="display:none">
+        <label class="form-label">Dify user ID</label>
+        <input type="text" class="form-input" id="api-user-inp" placeholder="batch-diagram" autocomplete="off">
+        <span class="form-hint">Dify 요청의 user 필드 (기본: batch-diagram). 모델은 Dify 앱에 설정된 qwen2-coder 등을 사용합니다.</span>
       </div>
       <div class="btn-row" style="margin-top:2px">
         <button class="btn btn-p" id="btn-save-api">저장</button>
