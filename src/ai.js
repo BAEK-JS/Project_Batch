@@ -480,6 +480,7 @@ export async function runAnalysis(userMsg) {
 
   AI.running = true; AI.error = '';
   if (!userMsg) {
+    // 전체 배치 흐름 분석
     AI.text = '';
     AI.history = [];
     AI.conversationId = '';
@@ -489,6 +490,16 @@ export async function runAnalysis(userMsg) {
       { role: 'user',   content: `다음 Control-M 배치 구조를 분석해주세요:\n\n${summary}\n\n다음 항목으로 분석해주세요:\n1. 📋 전체 배치 흐름 요약\n2. ⚡ 병렬 처리 구간 식별\n3. ⚠️ 잠재적 위험 요소 (단일 장애점, 병목 등)\n4. 💡 최적화 및 개선 제안` },
     ];
   } else {
+    // 바로 질문 — 이력이 없으면 그래프 컨텍스트만 먼저 심어 둠
+    if (!AI.history.length) {
+      AI.conversationId = '';
+      const summary = buildGraphSummary();
+      AI.history = [
+        { role: 'system', content: '당신은 Control-M 배치 워크플로우 전문가입니다. 배치 구조를 분석하여 실용적이고 명확한 한국어로 답변해주세요. 특정 배치명·그룹명을 언급할 때는 이름을 정확히 쓰세요.' },
+        { role: 'user', content: `참고용 Control-M 배치 구조입니다. 이후 질문에 활용하세요.\n\n${summary}` },
+        { role: 'assistant', content: '배치 구조를 확인했습니다. 궁금한 점이나 보고 싶은 배치·그룹을 말씀해 주세요.' },
+      ];
+    }
     AI.history.push({ role: 'user', content: userMsg });
     AI.text = '';
   }
@@ -551,6 +562,13 @@ export function renderAIPane() {
 </div>`;
   }
 
+  const canAsk = hasKey && !!S.graph && !AI.running;
+  const askBox = `
+  <div class="ai-followup" style="margin-top:10px">
+    <input type="text" id="ai-followup-inp" placeholder="바로 질문… 예: 01.수신 그룹 보여줘 / 병목 구간이 어디야?" ${canAsk ? '' : 'disabled'}>
+    <button class="btn btn-s" id="btn-followup" style="height:30px;padding:0 10px" ${canAsk ? '' : 'disabled'}>질문</button>
+  </div>`;
+
   const outputSection = (AI.text || AI.running)
     ? `<div class="pane-pad" style="padding-top:8px">
   <div class="section-title" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:8px">
@@ -561,10 +579,6 @@ export function renderAIPane() {
     </span>` : ''}
   </div>
   <div class="ai-output${AI.running && !AI.text ? ' blink' : ''}" id="ai-output">${AI.text ? linkifyJobNames(AI.text) : ''}</div>
-  ${AI.history.length >= 2 && !AI.running ? `<div class="ai-followup">
-    <input type="text" id="ai-followup-inp" placeholder="예: 01.수신 그룹 보여줘 / BCMP001001_S01 보여줘">
-    <button class="btn btn-s" id="btn-followup" style="height:30px;padding:0 10px">질문</button>
-  </div>` : ''}
 </div>` : '';
 
   $('ai-inner').innerHTML = `
@@ -581,11 +595,11 @@ export function renderAIPane() {
       ${AI.running ? '분석 중…' : '배치 흐름 분석'}
     </button>
   </div>
+  ${askBox}
   <div style="font-size:10.5px;color:var(--text3);margin-top:8px;line-height:1.6">
-    • <b>임베딩 생성</b>: 배치 정보를 벡터화해 시맨틱 검색 활성화${API.isDify ? ' (사내 모드 비활성)' : ''}<br>
-    • <b>배치 흐름 분석</b>: AI가 전체 흐름·위험요소·개선안 분석<br>
-    • <b>다이어그램 연동</b>: "<code>배치명 보여줘</code>" / "<code>그룹명 그룹 보여줘</code>" (AI 탭 유지)<br>
-    • <b>결과 저장</b>: 분석 후 TXT / 엑셀 버튼
+    • <b>배치 흐름 분석</b>: 전체 흐름·병목·개선안 한 번에 분석<br>
+    • <b>바로 질문</b>: 입력창에 바로 질문 / "<code>배치명 보여줘</code>" · "<code>그룹명 그룹 보여줘</code>"<br>
+    • <b>결과 저장</b>: 답변 후 TXT / 엑셀
   </div>
 </div>
 ${embStatus}
