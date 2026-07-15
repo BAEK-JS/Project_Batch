@@ -50,7 +50,16 @@ export const API = {
 export const EMB = { data: new Map(), built: false, building: false, progress: 0, total: 0 };
 
 // ── AI 분석 상태 ──────────────────────────────────────────────────────────────
-export const AI = { running: false, text: '', error: '', history: [], conversationId: '' };
+export const AI = {
+  running: false,
+  text: '',
+  error: '',
+  history: [],
+  conversationId: '',
+  /** 'auto' 현재 화면 | 'groups' 선택 그룹 | 'all' 전체 */
+  scopeMode: 'auto',
+  selectedGroups: new Set(),
+};
 
 // ── 검색 상태 ─────────────────────────────────────────────────────────────────
 export const SRCH = { results: [], last: '', running: false };

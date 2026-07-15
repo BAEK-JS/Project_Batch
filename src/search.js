@@ -82,8 +82,12 @@ function jobType(name) {
 export function renderSearchOutput(results) {
   const mode = EMB.built && API.key ? 'AI 시맨틱' : '키워드';
   const meta = $('search-meta');
-  meta.textContent = `${mode} 검색 · "${SRCH.last}" · ${results.length}건`;
-  meta.style.display = 'block';
+  const canExport = results.length > 0;
+  meta.style.display = 'flex';
+  meta.innerHTML = `
+    <span class="search-meta-text">${mode} 검색 · "${esc(SRCH.last)}" · ${results.length}건</span>
+    ${canExport ? `<button type="button" class="btn btn-g" id="btn-search-xls" style="height:24px;padding:0 8px;font-size:11px;flex-shrink:0">엑셀</button>` : ''}`;
+  $('btn-search-xls')?.addEventListener('click', exportSearchResultsExcel);
 
   if (!results.length) {
     $('search-results').innerHTML = `<div style="padding:14px 13px;font-size:12.5px;color:var(--text3)">검색 결과가 없습니다</div>`;
@@ -124,6 +128,88 @@ export function renderSearchOutput(results) {
   <span class="sr-score">${Math.round(r.score * 100)}%</span>
 </div>`;
   }).join('');
+}
+
+/** 검색 결과 목록 → 엑셀(.xls) 다운로드 */
+export function exportSearchResultsExcel() {
+  if (!SRCH.results?.length) {
+    alert('내보낼 검색 결과가 없습니다. 먼저 검색해 주세요.');
+    return;
+  }
+  const g = S.graph;
+  if (!g) return;
+
+  const xlEsc = v => String(v ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const cell = (v, style) =>
+    `<Cell${style ? ` ss:StyleID="${style}"` : ''}><Data ss:Type="String">${xlEsc(v)}</Data></Cell>`;
+  const numCell = (v, style) =>
+    `<Cell${style ? ` ss:StyleID="${style}"` : ''}><Data ss:Type="Number">${Number(v) || 0}</Data></Cell>`;
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  const mode = SRCH.results.some(r => r.semantic) ? '시맨틱' : '키워드';
+  const headers = ['순위', '배치명', '설명', 'APPLICATION', '그룹', '폴더', '서버', 'TYPE',
+    'IN조건', 'OUT조건', '선행', '후행', '점수(%)', '검색방식', '검색어'];
+
+  const rows = SRCH.results.map((r, i) => {
+    const j = g.jobs.find(jj => jj.name === r.name);
+    const up = g.edges.filter(e => e.to === r.name).map(e => e.from).join(', ');
+    const dn = g.edges.filter(e => e.from === r.name).map(e => e.to).join(', ');
+    return `<Row>` +
+      numCell(i + 1) +
+      cell(r.name) +
+      cell(j?.desc || '') +
+      cell(j?.app || '') +
+      cell(j?.sub || '') +
+      cell(j?.folder || '') +
+      cell(j?.nodeId || '') +
+      cell(j?.type || '') +
+      cell((j?.inConds || []).map(c => c.name).join(', ')) +
+      cell((j?.outConds || []).map(c => c.name).join(', ')) +
+      cell(up) +
+      cell(dn) +
+      numCell(Math.round((r.score || 0) * 100)) +
+      cell(r.semantic ? '시맨틱' : '키워드') +
+      cell(SRCH.last || '') +
+      `</Row>`;
+  }).join('\n');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles>
+  <Style ss:ID="Default"/>
+  <Style ss:ID="H"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#1f4e79" ss:Pattern="Solid"/></Style>
+</Styles>
+<Worksheet ss:Name="검색결과">
+<Table>
+${headers.map((_, i) => `<Column ss:Width="${i === 1 || i === 2 ? 160 : i >= 8 && i <= 11 ? 140 : 70}"/>`).join('')}
+<Row>${headers.map(h => cell(h, 'H')).join('')}</Row>
+${rows}
+</Table>
+</Worksheet>
+<Worksheet ss:Name="검색정보">
+<Table>
+<Column ss:Width="100"/><Column ss:Width="280"/>
+<Row>${cell('항목', 'H')}${cell('내용', 'H')}</Row>
+<Row>${cell('검색어')}${cell(SRCH.last || '')}</Row>
+<Row>${cell('방식')}${cell(mode)}</Row>
+<Row>${cell('건수')}${cell(String(SRCH.results.length))}</Row>
+<Row>${cell('저장일')}${cell(stamp)}</Row>
+</Table>
+</Worksheet>
+</Workbook>`;
+
+  const blob = new Blob(['\uFEFF' + xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const qSafe = String(SRCH.last || '검색').replace(/[\\/:*?"<>|]/g, '-').slice(0, 40);
+  a.href = url;
+  a.download = `ControlM_검색결과_${qSafe}_${stamp}.xls`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
 }
 
 export function renderFilterTree() {

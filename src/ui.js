@@ -680,6 +680,7 @@ export function clearAll() {
   $('ai-inner').innerHTML = ''; $('search-results').innerHTML = '';
   EMB.built = false; EMB.building = false; EMB.data.clear();
   AI.text = ''; AI.error = ''; AI.running = false; AI.history = []; AI.conversationId = '';
+  AI.scopeMode = 'auto'; AI.selectedGroups = new Set();
   SRCH.results = []; SRCH.last = '';
   dagRoot.innerHTML = '';
   setTab('input');
